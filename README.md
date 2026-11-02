@@ -20,6 +20,7 @@
   2. 没填 Key → **OpenRouter 公共目录**按厂商前缀过滤（OpenAI / Anthropic / Google / DeepSeek / Qwen / GLM / Kimi 各自的现役型号），状态显示「公共目录 · N 个模型」——它不是平台私有清单，但比内置静态列表实时；
   3. 都拿不到 → 内置常用型号；任何情况下都可以手动输入模型 ID。
 - **添加会真正落库**：点「添加模型」→ 写入 `llm-pi-ai` 的 `providers.<route>`（`api` / `baseURL` / 模型列表）+ 把 Key 存进 DSH 凭据库（`credentials.set`），然后重新打开模型菜单就能看到该服务商分组。Gemini 会自动改用官方的 OpenAI 兼容端点；Anthropic 走 `anthropic-messages` 协议。
+- **模型菜单里的「已添加」管理区**：在「添加模型」下面列出本插件添加过的第三方模型，支持搜索、编辑（改显示名 / 模型 ID / 地址，Key 留空保持不变）、删除（弹窗二次确认，同时移除配置与凭据）。数据来自 `remote.settings.describe()`，写入走 `remote.settings.mutate()` / `remote.credentials`，不需要额外 Host 路由。
 - **自定义服务商**只提供手动输入，不请求平台（便于接私有/自建网关）。
 - **自动跟随原生菜单**：用 `MutationObserver` 监听菜单的挂载，只在模型根菜单打开时注入那一行；菜单卸载时这一行随菜单 DOM 一起消失，插件卸载时再兜底清理一次，不残留 DOM。
 - **文案中英双语**：通过 `ctx.locale.register` 注册，跟随 DSH 当前语言切换（`locale/zh.json` / `locale/en.json` 同时提供插件管理器里显示的标题与描述）。
@@ -39,7 +40,9 @@
 | 把填写内容写进 DSH 模型服务配置（`llm-pi-ai`） | ✅ 已完成 |
 | API Key 存储 | ✅ 已存入 DSH 凭据库（不再只存内存） |
 | 新增服务商在模型菜单中出现 | ✅ 已完成（重开模型菜单刷新目录） |
-| 连通性测试 / 在界面里编辑或删除已添加项 | ⛔ 未实现（可在 设置 → 模型 里管理，或后续补 UI） |
+| 在模型菜单里展示 / 搜索已添加的第三方模型 | ✅ 已完成 |
+| 编辑 / 删除已添加项（删除有二次确认） | ✅ 已完成 |
+| 连通性测试 | ⛔ 未实现 |
 | Host 侧路由 / 服务 | ✅ 已完成（`/api/select-model/*`） |
 
 ## 安装

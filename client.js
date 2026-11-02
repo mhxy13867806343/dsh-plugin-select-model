@@ -119,6 +119,27 @@ window.__ModuleLoader__.load({
       'hint.localOnly': 'API Key 会存入本机 DSH 凭据库，只用于调用该服务商。',
       'note.preview': '未填 Key 时显示 OpenRouter 公共目录；填 Key 后以平台实时列表为准。',
       'toast.added': '已添加「{model}」，打开模型菜单即可使用',
+      'toast.updated': '已更新「{model}」',
+      'toast.deleted': '已删除「{model}」',
+      'manage.title': '已添加的第三方模型',
+      'manage.search': '搜索已添加…',
+      'manage.empty': '还没有添加第三方模型',
+      'manage.edit': '编辑',
+      'manage.delete': '删除',
+      'edit.title': '编辑模型',
+      'edit.desc': '修改后会同步更新模型服务配置；API Key 留空表示保持不变。',
+      'edit.displayName': '显示名称',
+      'edit.model': '模型 ID',
+      'edit.baseUrl': '接口地址',
+      'edit.apiKey': 'API Key',
+      'edit.apiKeyPlaceholder': '留空保持不变',
+      'edit.save': '保存',
+      'confirm.title': '删除模型',
+      'confirm.desc': '确定删除「{name}」吗？会同时移除模型服务配置和保存的 Key，且无法撤销。',
+      'confirm.delete': '删除',
+      'confirm.cancel': '取消',
+      'action.save': '保存',
+
       'add.loading': '添加中…',
       'add.err.network': '无法连接本机 Host，请确认 DSH 正在运行。',
       'add.err.restart': 'Host 半边还没加载：请重启一次 DSH 后再添加。',
@@ -193,6 +214,27 @@ window.__ModuleLoader__.load({
       'hint.localOnly': 'The API key is stored in the local DSH credential store, used only for this provider.',
       'note.preview': 'Without a key this shows the OpenRouter public directory; with a key the provider\'s live list wins.',
       'toast.added': 'Added “{model}” — open the model menu to use it',
+      'toast.updated': 'Updated “{model}”',
+      'toast.deleted': 'Deleted “{model}”',
+      'manage.title': 'Added third-party models',
+      'manage.search': 'Search added models…',
+      'manage.empty': 'No third-party models added yet',
+      'manage.edit': 'Edit',
+      'manage.delete': 'Delete',
+      'edit.title': 'Edit model',
+      'edit.desc': 'Saving updates the model-service config; leave the API key blank to keep it.',
+      'edit.displayName': 'Display name',
+      'edit.model': 'Model ID',
+      'edit.baseUrl': 'Base URL',
+      'edit.apiKey': 'API Key',
+      'edit.apiKeyPlaceholder': 'Leave blank to keep the current key',
+      'edit.save': 'Save',
+      'confirm.title': 'Delete model',
+      'confirm.desc': 'Delete “{name}”? This removes the model-service config and the stored key; it cannot be undone.',
+      'confirm.delete': 'Delete',
+      'confirm.cancel': 'Cancel',
+      'action.save': 'Save',
+
       'add.loading': 'Adding…',
       'add.err.network': 'Cannot reach the local host; check that DSH is running.',
       'add.err.restart': 'The host half is not loaded yet; restart DSH once, then add again.',
@@ -453,6 +495,26 @@ window.__ModuleLoader__.load({
 .dsm-modelItemCheck{flex:none;color:var(--dsw-alias-state-success-primary,#3fb950);font-size:12px;line-height:1}
 .dsm-modelEmpty{padding:10px 8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
 .dsm-modelRefresh{flex:none;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary,#a3a3a3);font-family:inherit;font-size:11px;line-height:16px;padding:2px 6px;cursor:pointer}
+.dsm-added[hidden]{display:none}
+.dsm-added{padding:4px 4px 2px;display:flex;flex-direction:column;min-width:0;border-top:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.22));margin-top:4px;max-height:230px}
+.dsm-addedHead{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 6px 3px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#a3a3a3)}
+.dsm-addedCount{color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-addedSearch{display:flex;align-items:center;height:26px;margin:2px 2px 4px;padding:0 7px;border:.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.34));border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.06))}
+.dsm-addedSearch input{flex:1;min-width:0;border:none;outline:none;background:transparent;color:var(--dsw-alias-label-primary,#e6e6e6);font-family:inherit;font-size:12px;line-height:18px}
+.dsm-addedSearch input::placeholder{color:var(--dsw-alias-label-dimmed,#6b6b6b)}
+.dsm-addedList{display:flex;flex-direction:column;gap:1px;overflow-y:auto;min-height:0}
+.dsm-addedRow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:var(--dsw-radius-sm,8px);min-width:0}
+.dsm-addedRow:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16))}
+.dsm-addedMain{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.dsm-addedName{font-size:12px;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-primary,#e6e6e6)}
+.dsm-addedSub{font-size:10px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-addedActions{display:flex;align-items:center;gap:2px;flex:none}
+.dsm-addedBtn{border:none;background:transparent;color:var(--dsw-alias-label-secondary,#a3a3a3);font-family:inherit;font-size:11px;line-height:16px;padding:2px 4px;border-radius:6px;cursor:pointer}
+.dsm-addedBtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.2));color:var(--dsw-alias-label-primary,#e6e6e6)}
+.dsm-addedBtn[data-danger="1"]:hover{background:var(--dsw-alias-interactive-bg-hover-danger,rgba(248,81,73,.16));color:var(--dsw-alias-state-error-primary,#f85149)}
+.dsm-addedEmpty{padding:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-btn[data-variant="danger"]{background:var(--dsw-alias-state-error-primary,#f85149);color:#fff}
+.dsm-btn[data-variant="danger"]:hover:not(:disabled){filter:brightness(1.08)}
 .dsm-modelRefresh:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));color:var(--dsw-alias-label-primary,#e6e6e6)}
 @keyframes dsmPop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
 @keyframes dsmToastIn{from{opacity:0;transform:translate(-50%,4px)}to{opacity:1;transform:translate(-50%,0)}}
@@ -545,7 +607,7 @@ window.__ModuleLoader__.load({
      * @param {(key:string, vars?:Record<string,string|number>) => string} t 翻译函数
      * @returns {() => void} 卸载清理
      */
-    function installMenuBridge(store, t) {
+    function installMenuBridge(store, t, options) {
       if (typeof document === 'undefined' || typeof MutationObserver !== 'function') return () => {};
 
       let disposed = false;
@@ -553,6 +615,14 @@ window.__ModuleLoader__.load({
       let observer = null;
       /** 本实例的标记：清理时只删自己注入的节点，避免 HMR 重载时新旧实例互删。 */
       const owner = Math.random().toString(36).slice(2, 10);
+      const loadAdded = typeof options?.loadAdded === 'function' ? options.loadAdded : async () => [];
+      const bridge = options?.bridge ?? { refresh: () => {} };
+
+      let addedItems = [];
+      let addedQuery = '';
+      let sectionEl = null;
+      let listEl = null;
+      let refreshedMenu = null;
 
       /** 找到当前打开的模型根菜单（只认内置 zh/en 两个 aria-label）。 */
       const findModelRootMenu = () => {
@@ -565,7 +635,7 @@ window.__ModuleLoader__.load({
         return null;
       };
 
-      /** 关闭内置菜单：优先点一次它的触发按钮（等价于再点一次），失败再派发 Escape。 */
+      /** 关闭内置菜单：优先点一次它的触发按钮，失败再派发 Escape。 */
       const closeBuiltInMenu = (menu) => {
         const id = menu.getAttribute('id');
         let trigger = null;
@@ -584,10 +654,176 @@ window.__ModuleLoader__.load({
         fallback.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       };
 
-      /** 给一个刚打开的根菜单补齐分隔线 + 添加模型行。 */
+      /** 菜单里的「已添加第三方模型」：重建列表部分（不动搜索框，避免输入时丢焦点）。 */
+      const renderAddedList = () => {
+        if (listEl === null || !listEl.isConnected) return;
+        listEl.replaceChildren();
+        const needle = addedQuery.trim().toLowerCase();
+        const filtered =
+          needle === ''
+            ? addedItems
+            : addedItems.filter((item) =>
+                `${item.displayName} ${item.modelId} ${item.baseURL}`.toLowerCase().includes(needle),
+              );
+        if (filtered.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'dsm-addedEmpty';
+          empty.textContent = t('manage.empty');
+          listEl.append(empty);
+          return;
+        }
+        for (const item of filtered) {
+          const rowEl = document.createElement('div');
+          rowEl.className = 'dsm-addedRow';
+          rowEl.setAttribute('data-dsm-added-row', '');
+          rowEl.setAttribute('data-route', item.route);
+
+          const main = document.createElement('div');
+          main.className = 'dsm-addedMain';
+          const name = document.createElement('span');
+          name.className = 'dsm-addedName';
+          name.textContent = item.displayName;
+          name.title = item.displayName;
+          const sub = document.createElement('span');
+          sub.className = 'dsm-addedSub';
+          sub.textContent = item.modelId || item.baseURL;
+          sub.title = `${item.modelId} ${item.baseURL}`.trim();
+          main.append(name, sub);
+
+          const actions = document.createElement('div');
+          actions.className = 'dsm-addedActions';
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'dsm-addedBtn';
+          editBtn.textContent = t('manage.edit');
+          editBtn.setAttribute('data-action', 'edit');
+          editBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = findModelRootMenu();
+            if (menu !== null) {
+              try {
+                closeBuiltInMenu(menu);
+              } catch {
+                /* 关不掉也让弹窗打开 */
+              }
+            }
+            store.set({ editTarget: item });
+          });
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'dsm-addedBtn';
+          deleteBtn.setAttribute('data-danger', '1');
+          deleteBtn.setAttribute('data-action', 'delete');
+          deleteBtn.textContent = t('manage.delete');
+          deleteBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = findModelRootMenu();
+            if (menu !== null) {
+              try {
+                closeBuiltInMenu(menu);
+              } catch {
+                /* 关不掉也让弹窗打开 */
+              }
+            }
+            store.set({ confirmTarget: item });
+          });
+          actions.append(editBtn, deleteBtn);
+          rowEl.append(main, actions);
+          listEl.append(rowEl);
+        }
+      };
+
+      /** 重建整个管理区；items 为空时整块隐藏，保持菜单干净。 */
+      const renderAddedSection = () => {
+        if (sectionEl === null || !sectionEl.isConnected) return;
+        sectionEl.replaceChildren();
+        listEl = null;
+        if (addedItems.length === 0) {
+          sectionEl.hidden = true;
+          return;
+        }
+        sectionEl.hidden = false;
+
+        const head = document.createElement('div');
+        head.className = 'dsm-addedHead';
+        const title = document.createElement('span');
+        title.textContent = t('manage.title');
+        const count = document.createElement('span');
+        count.className = 'dsm-addedCount';
+        count.textContent = String(addedItems.length);
+        head.append(title, count);
+        sectionEl.append(head);
+
+        if (addedItems.length > 1) {
+          const searchWrap = document.createElement('span');
+          searchWrap.className = 'dsm-addedSearch';
+          const input = document.createElement('input');
+          input.type = 'search';
+          input.placeholder = t('manage.search');
+          input.value = addedQuery;
+          input.setAttribute('aria-label', t('manage.search'));
+          input.addEventListener('input', () => {
+            addedQuery = input.value;
+            renderAddedList();
+          });
+          searchWrap.append(input);
+          sectionEl.append(searchWrap);
+        }
+
+        listEl = document.createElement('div');
+        listEl.className = 'dsm-addedList';
+        sectionEl.append(listEl);
+        renderAddedList();
+      };
+
+      /** 拉一次已添加列表并渲染。 */
+      const refreshAdded = async (menu) => {
+        if (menu !== null) ensureSection(menu);
+        try {
+          addedItems = await loadAdded();
+        } catch {
+          addedItems = [];
+        }
+        if (disposed) return;
+        renderAddedSection();
+      };
+      bridge.refresh = () => {
+        const menu = findModelRootMenu();
+        if (menu === null) return;
+        void refreshAdded(menu);
+      };
+
+      /** 确保菜单末尾有管理区容器。 */
+      const ensureSection = (menu) => {
+        let section = menu.querySelector(':scope > [data-dsm-added]');
+        if (!(section instanceof HTMLElement)) {
+          section = document.createElement('div');
+          section.className = 'dsm-added';
+          section.setAttribute('data-dsm-added', '');
+          section.setAttribute('data-dsm-owner', owner);
+          menu.append(section);
+        }
+        if (section !== sectionEl) {
+          sectionEl = section;
+          listEl = null;
+        }
+        return section;
+      };
+
+      /** 给一个刚打开的根菜单补齐分隔线 + 添加模型行 + 管理区。 */
       const injectInto = (menu) => {
         if (disposed) return false;
-        if (menu.querySelector(`:scope > [${ROW_ATTR}]`) !== null) return true;
+        const rowExists = menu.querySelector(`:scope > [${ROW_ATTR}]`) !== null;
+        if (rowExists) {
+          ensureSection(menu);
+          if (refreshedMenu !== menu) {
+            refreshedMenu = menu;
+            void refreshAdded(menu);
+          }
+          return true;
+        }
 
         const cells = [];
         for (const node of menu.children) {
@@ -629,6 +865,8 @@ window.__ModuleLoader__.load({
           'flex:none;height:1px;margin:4px 8px;background:var(--dsw-alias-border-l1,rgba(127,127,127,.28))';
 
         menu.append(divider, row);
+        refreshedMenu = menu;
+        void refreshAdded(menu);
         return true;
       };
 
@@ -662,6 +900,7 @@ window.__ModuleLoader__.load({
         observer = null;
         document.querySelectorAll(`[${ROW_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
         document.querySelectorAll(`[${DIVIDER_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
+        document.querySelectorAll(`[data-dsm-added][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
       };
     }
 
@@ -1808,6 +2047,79 @@ window.__ModuleLoader__.load({
           };
         };
 
+        /** 打开模型菜单，读取「已添加列表」并可试开编辑/删除弹窗（不保存/不删除）。 */
+        const manageProbe = async (input) => {
+          const action = input?.action === 'edit' || input?.action === 'delete' ? input.action : 'none';
+          if (store.get().open === true) store.set({ open: false });
+          let menu = findMenu();
+          if (menu === null) {
+            const trigger = findTrigger();
+            if (trigger === null) return { ok: false, reason: 'model-trigger-not-found' };
+            trigger.click();
+            menu = await waitFor(findMenu);
+          }
+          if (menu === null) return { ok: false, reason: 'model-menu-not-opened' };
+          const rows = await waitFor(
+            () => {
+              const list = document.querySelectorAll('[data-dsm-added-row]');
+              if (list.length > 0) return list;
+              const section = document.querySelector('[data-dsm-added]');
+              return section !== null && section.hidden === false ? list : null;
+            },
+            6000,
+          );
+          const addedNodes = Array.from(document.querySelectorAll('[data-dsm-added-row]'));
+          const result = {
+            ok: addedNodes.length > 0,
+            menuRows: Array.from(menu.children)
+              .filter((node) => node instanceof HTMLElement && node.matches('button[role="menuitem"]'))
+              .map((node) => (node.textContent ?? '').trim()),
+            addedCount: addedNodes.length,
+            addedRows: addedNodes.map((node) => ({
+              text: (node.textContent ?? '').trim(),
+              route: node.getAttribute('data-route'),
+            })),
+            hasSearch: document.querySelector('[data-dsm-added] input[type="search"]') !== null,
+            sectionVisible: document.querySelector('[data-dsm-added]')?.hidden === false,
+            actionDialog: null,
+          };
+          if (action !== 'none' && addedNodes.length > 0) {
+            const button = addedNodes[0].querySelector(
+              action === 'edit' ? '[data-action="edit"]' : '[data-action="delete"]',
+            );
+            if (button === null) {
+              // 编辑/删除按钮没有 data-action，按文本匹配兜底
+              const candidates = addedNodes[0].querySelectorAll('button');
+              const target =
+                action === 'edit' ? candidates[0] : candidates[candidates.length - 1];
+              if (target instanceof HTMLElement) target.click();
+            } else if (button instanceof HTMLElement) {
+              button.click();
+            }
+            const dialog =
+              action === 'edit'
+                ? await waitFor(() => document.querySelector('[data-testid="select-model-edit-dialog"]'), 2500)
+                : await waitFor(() => document.querySelector('[data-testid="select-model-confirm-dialog"]'), 2500);
+            if (dialog !== null) {
+              result.actionDialog = {
+                title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
+                description: (dialog.querySelector('.dsm-desc')?.textContent ?? '').trim(),
+                fields: Array.from(dialog.querySelectorAll('input')).map((node) => ({
+                  value: node.value,
+                  placeholder: node.getAttribute('placeholder'),
+                  type: node.getAttribute('type'),
+                })),
+                buttons: Array.from(dialog.querySelectorAll('.dsm-footer .dsm-btn')).map((node) => ({
+                  text: (node.textContent ?? '').trim(),
+                  variant: node.getAttribute('data-variant'),
+                })),
+              };
+              store.set({ editTarget: null, confirmTarget: null });
+            }
+          }
+          return result;
+        };
+
         /** 只打开模型菜单并停在打开状态（供截图检查「添加模型」行）。 */
         const openMenu = async () => {
           if (store.get().open === true) {
@@ -1958,6 +2270,40 @@ window.__ModuleLoader__.load({
                 hint === null ? null : hint.getBoundingClientRect().bottom <= finalRect.bottom - 24,
             },
           };
+        };
+
+        /** 只读：通过 remote.settings.describe 验证客户端能读到 llm-pi-ai 的配置与 revision。 */
+        const settingsProbe = async () => {
+          try {
+            const response = await ctx.remote.settings.describe();
+            if (!response.ok) {
+              return { ok: false, error: response.error?.code ?? 'describe-failed', detail: response.error?.message };
+            }
+            const namespaces = Array.isArray(response.value?.namespaces) ? response.value.namespaces : [];
+            const ns = namespaces.find((item) => item?.ns === 'llm-pi-ai');
+            if (ns === undefined) return { ok: false, error: 'namespace-missing', available: namespaces.map((item) => item?.ns) };
+            const providers = ns.value?.providers;
+            return {
+              ok: true,
+              revision: ns.revision ?? null,
+              providerCount: providers !== null && typeof providers === 'object' ? Object.keys(providers).length : 0,
+              providers:
+                providers !== null && typeof providers === 'object'
+                  ? Object.entries(providers).map(([route, profile]) => ({
+                      route,
+                      displayName: typeof profile?.displayName === 'string' ? profile.displayName : null,
+                      api: typeof profile?.api === 'string' ? profile.api : null,
+                      baseURL: typeof profile?.baseURL === 'string' ? profile.baseURL : null,
+                      apiKeyEnv: typeof profile?.apiKeyEnv === 'string' ? profile.apiKeyEnv : null,
+                      models: Array.isArray(profile?.models)
+                        ? profile.models.map((model) => (typeof model?.id === 'string' ? model.id : '')).filter(Boolean)
+                        : [],
+                    }))
+                  : [],
+            };
+          } catch (error) {
+            return { ok: false, error: 'probe-failed', detail: String(error?.message ?? error) };
+          }
         };
 
         /** 直接验证「浏览器直连平台 /models」（不经过 Host 代理）。 */
@@ -2168,6 +2514,19 @@ window.__ModuleLoader__.load({
                     outputSchema: { description: '自检报告。' },
                   },
                   {
+                    name: 'manage',
+                    description:
+                      '自动化：打开模型菜单并读取「已添加的第三方模型」列表；可传 action=edit/delete 试开编辑/删除弹窗（只打开不保存/不删除）。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        action: { type: 'string', description: 'none | edit | delete，默认 none' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '管理区行、搜索框与弹窗内容。' },
+                  },
+                  {
                     name: 'menu',
                     description: '自动化：只打开模型菜单并保持打开，供截图检查「添加模型」行的位置与样式（用 close 收起）。',
                     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -2188,6 +2547,12 @@ window.__ModuleLoader__.load({
                       additionalProperties: false,
                     },
                     outputSchema: { description: '打开结果、弹窗尺寸与模型选择器状态。' },
+                  },
+                  {
+                    name: 'settingsProbe',
+                    description: '只读：通过 remote.settings.describe 读取 llm-pi-ai 的 provider 列表与 revision（验证客户端能否直接读写模型服务配置）。',
+                    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+                    outputSchema: { description: 'llm-pi-ai 的 provider 摘要（不含密钥）。' },
                   },
                   {
                     name: 'directProbe',
@@ -2234,6 +2599,8 @@ window.__ModuleLoader__.load({
                 if (method === 'selfTest') return selfTest();
                 if (method === 'menu') return openMenu();
                 if (method === 'preview') return openPreview(input);
+                if (method === 'settingsProbe') return settingsProbe();
+                if (method === 'manage') return manageProbe(input);
                 if (method === 'directProbe') return directProbe(input);
                 if (method === 'modelProbe') return modelProbe(input);
                 if (method === 'close') return closePreview();
@@ -2248,7 +2615,7 @@ window.__ModuleLoader__.load({
     // ─────────────────────────────────────────────────────── 插件入口
 
     const plugin = {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'remote', 'remote.settings', 'remote.credentials'],
       /**
        * Client 插件主体：注册文案/样式、常驻弹窗宿主、模型菜单 DOM 增强、自检入口。
        * @param {object} ctx client 根上下文
@@ -2259,7 +2626,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ensureStyles(), 'select-model: styles');
 
         // 共享状态：菜单行点击 → 打开弹窗；提交 → 关闭 + Toast。
-        const store = createStore({ open: false, toast: null });
+        const store = createStore({ open: false, toast: null, editTarget: null, confirmTarget: null });
         let toastTimer = null;
 
         const showToast = (text) => {
@@ -2280,10 +2647,221 @@ window.__ModuleLoader__.load({
           'select-model: toast timer',
         );
 
+        /** 编辑一个已添加的模型（写回 llm-pi-ai；Key 留空保持不变）。 */
+        function EditModelDialog({ target, onClose, onSaved }) {
+          const [displayName, setDisplayName] = useState(target.displayName ?? '');
+          const [modelId, setModelId] = useState(target.modelId ?? '');
+          const [baseUrl, setBaseUrl] = useState(target.baseURL ?? '');
+          const [apiKey, setApiKey] = useState('');
+          const [busy, setBusy] = useState(false);
+          const [error, setError] = useState(null);
+
+          const save = async () => {
+            if (busy) return;
+            const trimmedModel = modelId.trim();
+            const trimmedBase = baseUrl.trim();
+            if (trimmedModel === '') {
+              setError(t('add.err.missing-model'));
+              return;
+            }
+            try {
+              const parsed = new URL(trimmedBase);
+              if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('bad');
+            } catch {
+              setError(t('add.err.invalid-base-url'));
+              return;
+            }
+            setBusy(true);
+            setError(null);
+            try {
+              const written = await ctx.remote.settings.mutate('llm-pi-ai', [
+                {
+                  op: 'set',
+                  path: ['providers', target.route],
+                  value: {
+                    displayName: displayName.trim() === '' ? target.route : displayName.trim(),
+                    api: target.api || 'openai-completions',
+                    baseURL: trimmedBase,
+                    ...(target.apiKeyEnv === undefined ? {} : { apiKeyEnv: target.apiKeyEnv }),
+                    models: [{ id: trimmedModel, name: trimmedModel }],
+                  },
+                },
+              ]);
+              if (written.ok !== true) {
+                setError(t('add.err.settings-failed', { detail: written.error?.message ?? '' }));
+                return;
+              }
+              if (apiKey.trim() !== '' && target.apiKeyEnv !== undefined) {
+                const stored = await ctx.remote.credentials.set(target.apiKeyEnv, apiKey.trim());
+                if (stored.ok !== true) {
+                  setError(t('add.err.generic', { detail: stored.error?.message ?? 'credential-failed' }));
+                  return;
+                }
+              }
+              onSaved(trimmedModel);
+            } catch {
+              setError(t('add.err.network'));
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              onClose();
+            }
+          };
+
+          return h(
+            'div',
+            { className: 'dsm-root' },
+            h('div', { className: 'dsm-mask', 'aria-hidden': 'true', onClick: onClose }),
+            h(
+              'div',
+              {
+                className: 'dsm-dialog',
+                role: 'dialog',
+                'aria-modal': 'true',
+                'aria-label': t('edit.title'),
+                'data-testid': 'select-model-edit-dialog',
+                onKeyDown,
+              },
+              h(
+                'div',
+                { className: 'dsm-content' },
+                h(
+                  'div',
+                  { className: 'dsm-header' },
+                  h('h2', { className: 'dsm-title' }, t('edit.title')),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dsm-close', 'aria-label': t('action.close'), onClick: onClose },
+                    '×',
+                  ),
+                ),
+                h('p', { className: 'dsm-desc' }, t('edit.desc')),
+                h(
+                  'div',
+                  { className: 'dsm-body' },
+                  error !== null
+                    ? h('div', { className: 'dsm-submitError', role: 'alert' }, h('span', null, error))
+                    : null,
+                  h(
+                    DsmField,
+                    { label: t('edit.displayName') },
+                    h(DsmInput, { value: displayName, onChange: setDisplayName, ariaLabel: t('edit.displayName') }),
+                  ),
+                  h(
+                    DsmField,
+                    { label: t('edit.model') },
+                    h(DsmInput, { value: modelId, onChange: setModelId, ariaLabel: t('edit.model') }),
+                  ),
+                  h(
+                    DsmField,
+                    { label: t('edit.baseUrl') },
+                    h(DsmInput, { value: baseUrl, onChange: setBaseUrl, ariaLabel: t('edit.baseUrl') }),
+                  ),
+                  h(
+                    DsmField,
+                    { label: t('edit.apiKey') },
+                    h(DsmInput, {
+                      value: apiKey,
+                      onChange: setApiKey,
+                      type: 'password',
+                      placeholder: t('edit.apiKeyPlaceholder'),
+                      ariaLabel: t('edit.apiKey'),
+                    }),
+                  ),
+                ),
+              ),
+              h(
+                'div',
+                { className: 'dsm-footer' },
+                h(DsmButton, { variant: 'ghost', onClick: onClose, disabled: busy }, t('action.cancel')),
+                h(DsmButton, { variant: 'primary', onClick: save, disabled: busy }, busy ? t('add.loading') : t('action.save')),
+              ),
+            ),
+          );
+        }
+
+        /** 删除确认：删除 provider 配置与凭据，二次确认后执行。 */
+        function ConfirmDeleteDialog({ target, onClose, onDeleted }) {
+          const [busy, setBusy] = useState(false);
+          const [error, setError] = useState(null);
+          const remove = async () => {
+            if (busy) return;
+            setBusy(true);
+            setError(null);
+            try {
+              const removed = await ctx.remote.settings.mutate('llm-pi-ai', [
+                { op: 'unset', path: ['providers', target.route] },
+              ]);
+              if (removed.ok !== true) {
+                setError(t('add.err.generic', { detail: removed.error?.message ?? '' }));
+                return;
+              }
+              if (target.apiKeyEnv !== undefined) {
+                await ctx.remote.credentials.unset(target.apiKeyEnv).catch(() => {});
+              }
+              onDeleted(target);
+            } catch {
+              setError(t('add.err.network'));
+            } finally {
+              setBusy(false);
+            }
+          };
+          return h(
+            'div',
+            { className: 'dsm-root' },
+            h('div', { className: 'dsm-mask', 'aria-hidden': 'true', onClick: onClose }),
+            h(
+              'div',
+              {
+                className: 'dsm-dialog',
+                role: 'alertdialog',
+                'aria-modal': 'true',
+                'aria-label': t('confirm.title'),
+                'data-testid': 'select-model-confirm-dialog',
+              },
+              h(
+                'div',
+                { className: 'dsm-content' },
+                h(
+                  'div',
+                  { className: 'dsm-header' },
+                  h('h2', { className: 'dsm-title' }, t('confirm.title')),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dsm-close', 'aria-label': t('action.close'), onClick: onClose },
+                    '×',
+                  ),
+                ),
+                h('p', { className: 'dsm-desc' }, t('confirm.desc', { name: target.displayName })),
+                error !== null
+                  ? h(
+                      'div',
+                      { className: 'dsm-body' },
+                      h('div', { className: 'dsm-submitError', role: 'alert' }, h('span', null, error)),
+                    )
+                  : null,
+              ),
+              h(
+                'div',
+                { className: 'dsm-footer' },
+                h(DsmButton, { variant: 'ghost', onClick: onClose, disabled: busy }, t('confirm.cancel')),
+                h(DsmButton, { variant: 'danger', onClick: remove, disabled: busy }, busy ? t('add.loading') : t('confirm.delete')),
+              ),
+            ),
+          );
+        }
+
         /** 常驻 overlay 宿主：弹窗 + 状态条。 */
         function DialogHost() {
           const open = useStoreValue(store, (state) => state.open);
           const toast = useStoreValue(store, (state) => state.toast);
+          const editTarget = useStoreValue(store, (state) => state.editTarget);
+          const confirmTarget = useStoreValue(store, (state) => state.confirmTarget);
           // 热更新会换掉插件实例：把上一次实例遗留在 body 里的 portal / 弹窗清掉，
           // 避免出现「旧下拉盖住新下拉」这种只在开发时可见的残影。
           useEffect(() => {
@@ -2294,16 +2872,37 @@ window.__ModuleLoader__.load({
           return h(
             Fragment,
             null,
-            h(AddModelDialog, {
-              open,
-              t,
-              onClose: () => store.set({ open: false }),
-              onSubmit: (draft) => {
-                writeDraft(draft);
-                store.set({ open: false });
-                showToast(t('toast.added', { model: draft.modelName || draft.providerName }));
-              },
-            }),
+            editTarget !== null
+              ? h(EditModelDialog, {
+                  target: editTarget,
+                  onClose: () => store.set({ editTarget: null }),
+                  onSaved: (model) => {
+                    store.set({ editTarget: null });
+                    bridge.refresh();
+                    showToast(t('toast.updated', { model }));
+                  },
+                })
+              : confirmTarget !== null
+                ? h(ConfirmDeleteDialog, {
+                    target: confirmTarget,
+                    onClose: () => store.set({ confirmTarget: null }),
+                    onDeleted: (target) => {
+                      store.set({ confirmTarget: null });
+                      bridge.refresh();
+                      showToast(t('toast.deleted', { model: target.displayName }));
+                    },
+                  })
+                : h(AddModelDialog, {
+                    open,
+                    t,
+                    onClose: () => store.set({ open: false }),
+                    onSubmit: (draft) => {
+                      writeDraft(draft);
+                      store.set({ open: false });
+                      bridge.refresh();
+                      showToast(t('toast.added', { model: draft.modelName || draft.providerName }));
+                    },
+                  }),
             toast !== null
               ? h(DsmToast, {
                   key: toast.id,
@@ -2324,8 +2923,43 @@ window.__ModuleLoader__.load({
           ),
         );
 
-        // 内置模型菜单没有扩展槽位：用 DOM 增强补一行。
-        ctx.effect(() => installMenuBridge(store, t), 'select-model: model menu bridge');
+        /** 读取「本插件写入的第三方模型」列表（route 以 sel- 开头）。 */
+        const loadAdded = async () => {
+          try {
+            const response = await ctx.remote.settings.describe();
+            const namespaces = response.ok === true ? (response.value?.namespaces ?? []) : [];
+            const namespace = namespaces.find((item) => item?.ns === 'llm-pi-ai');
+            const providers = namespace?.value?.providers;
+            if (providers === null || typeof providers !== 'object') return [];
+            const items = [];
+            for (const [route, profile] of Object.entries(providers)) {
+              if (!route.startsWith('sel-') || profile === null || typeof profile !== 'object') continue;
+              const firstModel = Array.isArray(profile.models) ? profile.models[0] : undefined;
+              items.push({
+                route,
+                displayName:
+                  typeof profile.displayName === 'string' && profile.displayName !== ''
+                    ? profile.displayName
+                    : route,
+                modelId: typeof firstModel?.id === 'string' ? firstModel.id : '',
+                modelLabel: typeof firstModel?.name === 'string' ? firstModel.name : '',
+                baseURL: typeof profile.baseURL === 'string' ? profile.baseURL : '',
+                api: typeof profile.api === 'string' ? profile.api : 'openai-completions',
+                apiKeyEnv: typeof profile.apiKeyEnv === 'string' ? profile.apiKeyEnv : undefined,
+              });
+            }
+            return items.sort((left, right) => left.displayName.localeCompare(right.displayName));
+          } catch {
+            return [];
+          }
+        };
+        const bridge = { refresh: () => {} };
+
+        // 内置模型菜单没有扩展槽位：用 DOM 增强补「添加模型」行 + 已添加列表。
+        ctx.effect(
+          () => installMenuBridge(store, t, { loadAdded, bridge }),
+          'select-model: model menu bridge',
+        );
 
         // 只读自检入口（cordis_inspect_query → client provider "SelectModel"）。
         installInspectProvider(ctx, store, t);
