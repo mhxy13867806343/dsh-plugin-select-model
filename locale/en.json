@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Model Menu · Add Model",
-    "description": "Adds an \"Add model\" entry to the bottom of the model menu so you can pick a third-party provider or paste an API key directly. This build is the UI layout only."
+    "description": "Adds \"Add model\" and \"Manage added models\" to the bottom of the model menu: fetch a provider's live model list, write it into the DSH model config, and switch the current conversation to any added model with one click — the model in use stays highlighted."
   }
 }

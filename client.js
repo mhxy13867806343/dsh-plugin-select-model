@@ -130,6 +130,17 @@ window.__ModuleLoader__.load({
       'manage.empty': '还没有添加第三方模型',
       'manage.edit': '编辑',
       'manage.delete': '删除',
+      'manage.select': '选择',
+      'manage.selecting': '切换中…',
+      'manage.selected': '已选择',
+      'manage.current': '使用中',
+      'select.noSession': '没有打开的对话，无法切换模型；先进入一个对话再试。',
+      'select.unavailable': '当前环境不支持切换模型；刷新一下页面再试。',
+      'select.writerHeld': '当前对话正在生成回复，等这一轮结束后再切换。',
+      'select.modelUnavailable': '这个模型还没出现在模型目录里；重开一次模型菜单刷新后再试。',
+      'select.sessionLost': '这个对话已经不在了，刷新页面后重试。',
+      'select.failed': '切换失败：{detail}',
+      'toast.selected': '已切换到「{model}」',
       'edit.title': '编辑模型',
       'edit.desc': '修改后会同步更新模型服务配置；API Key 留空表示保持不变。',
       'edit.displayName': '显示名称',
@@ -230,6 +241,17 @@ window.__ModuleLoader__.load({
       'manage.empty': 'No third-party models added yet',
       'manage.edit': 'Edit',
       'manage.delete': 'Delete',
+      'manage.select': 'Select',
+      'manage.selecting': 'Switching…',
+      'manage.selected': 'Selected',
+      'manage.current': 'In use',
+      'select.noSession': 'No conversation is open, so there is no model to switch.',
+      'select.unavailable': 'Model switching is unavailable here; refresh the page and try again.',
+      'select.writerHeld': 'This conversation is still generating; switch after the current turn ends.',
+      'select.modelUnavailable': 'This model is not in the catalog yet; reopen the model menu to refresh it.',
+      'select.sessionLost': 'This conversation no longer exists; refresh the page and try again.',
+      'select.failed': 'Switch failed: {detail}',
+      'toast.selected': 'Switched to “{model}”',
       'edit.title': 'Edit model',
       'edit.desc': 'Saving updates the model-service config; leave the API key blank to keep it.',
       'edit.displayName': 'Display name',
@@ -527,8 +549,11 @@ window.__ModuleLoader__.load({
 .dsm-manageList{display:flex;flex-direction:column;gap:4px}
 .dsm-manageRow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.05))}
 .dsm-manageMain{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.dsm-manageTitle{display:flex;align-items:center;gap:6px;min-width:0}
 .dsm-manageName{font-size:13px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-primary,#e6e6e6)}
 .dsm-manageSub{font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-manageRow[data-current="1"]{border-color:var(--dsw-alias-brand-primary,#4d6bfe);background:var(--dsw-alias-bg-layer-2,rgba(77,107,254,.10));box-shadow:inset 0 0 0 1px var(--dsw-alias-brand-primary,#4d6bfe)}
+.dsm-manageBadge{flex:none;display:inline-flex;align-items:center;height:16px;padding:0 6px;border:.5px solid var(--dsw-alias-brand-primary,#4d6bfe);border-radius:999px;font-size:10px;line-height:16px;font-weight:500;color:var(--dsw-alias-brand-primary,#4d6bfe);white-space:nowrap}
 .dsm-manageActions{display:flex;align-items:center;gap:6px;flex:none}
 .dsm-manageEmpty{padding:18px 4px;text-align:center;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
 .dsm-btn[data-variant="danger"]{background:var(--dsw-alias-state-error-primary,#f85149);color:#fff}
@@ -800,7 +825,7 @@ window.__ModuleLoader__.load({
     // ─────────────────────────────────────────────────────── 小型基础组件
 
     /** 主题化文本按钮（等价于内置 Button 的 primary/ghost + md/sm）。 */
-    function DsmButton({ variant = 'ghost', size = 'md', disabled, onClick, type = 'button', children }) {
+    function DsmButton({ variant = 'ghost', size = 'md', disabled, onClick, type = 'button', children, ...rest }) {
       return h(
         'button',
         {
@@ -810,6 +835,7 @@ window.__ModuleLoader__.load({
           'data-size': size,
           disabled: disabled === true,
           onClick,
+          ...rest,
         },
         children,
       );
@@ -1940,6 +1966,27 @@ window.__ModuleLoader__.load({
           };
         };
 
+        /** 把管理弹窗里的每一行读成可比较的结构（名称、副标题、是否当前、按钮）。 */
+        const describeManageRows = (dialog) =>
+          Array.from(dialog.querySelectorAll('.dsm-manageRow')).map((node) => ({
+            name: (node.querySelector('.dsm-manageName')?.textContent ?? '').trim(),
+            sub: (node.querySelector('.dsm-manageSub')?.textContent ?? '').trim(),
+            current: node.getAttribute('data-current') === '1',
+            badge: (node.querySelector('.dsm-manageBadge')?.textContent ?? '').trim() || null,
+            buttons: Array.from(node.querySelectorAll('button')).map((button) => ({
+              text: (button.textContent ?? '').trim(),
+              action: button.getAttribute('data-action'),
+              disabled: button.disabled === true,
+            })),
+          }));
+
+        /** 只读：读取当前已经打开的管理弹窗（不打开/不关闭），用于检查高亮。 */
+        const manageState = () => {
+          const dialog = document.querySelector('[data-testid="select-model-manage-dialog"]');
+          if (dialog === null) return { ok: false, reason: 'manage-dialog-not-open' };
+          return { ok: true, rows: describeManageRows(dialog) };
+        };
+
         /** 打开模型菜单 → 点「管理已添加模型」→ 读取管理弹窗；可试开编辑/删除弹窗（不保存/不删除）。 */
         const manageProbe = async (input) => {
           const action =
@@ -1989,24 +2036,12 @@ window.__ModuleLoader__.load({
             title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
             hasSearch: dialog.querySelector('input') !== null,
             rowCount: rows.length,
-            rows: rows.map((node) => ({
-              name: (node.querySelector('.dsm-manageName')?.textContent ?? '').trim(),
-              sub: (node.querySelector('.dsm-manageSub')?.textContent ?? '').trim(),
-              buttons: Array.from(node.querySelectorAll('button')).map((button) => (button.textContent ?? '').trim()),
-            })),
+            rows: describeManageRows(dialog),
           };
           result.ok = rows.length >= 0;
           if (action !== 'none' && rows.length > 0) {
-            const button = rows[0].querySelector(
-              action === 'edit' ? 'button[data-action="edit"]' : 'button[data-action="delete"]',
-            );
-            if (button === null) {
-              const buttons = rows[0].querySelectorAll('button');
-              const target = action === 'edit' ? buttons[0] : buttons[buttons.length - 1];
-              if (target instanceof HTMLElement) target.click();
-            } else if (button instanceof HTMLElement) {
-              button.click();
-            }
+            const button = rows[0].querySelector(`button[data-action="${action}"]`);
+            if (button instanceof HTMLElement) button.click();
             const modal =
               action === 'edit'
                 ? await waitFor(() => document.querySelector('[data-testid="select-model-edit-dialog"]'), 2500)
@@ -2030,6 +2065,73 @@ window.__ModuleLoader__.load({
             }
           }
           return result;
+        };
+
+        /** 只读：当前会话、用于高亮的模型选择，以及切换模型所需的 remote 面是否就绪。 */
+        const selectionProbe = async () => {
+          const sessionId = store.get().sessionId;
+          let hasBinding = false;
+          let projection = null;
+          try {
+            const binding = sessionId === undefined ? undefined : ctx.sessions.binding(sessionId);
+            hasBinding = binding !== undefined;
+            const projected = binding?.session?.projections?.faceOf?.('modelSelection');
+            projection = projected?.getSnapshot?.() ?? null;
+          } catch (error) {
+            projection = { error: String(error?.message ?? error) };
+          }
+          let catalog = null;
+          try {
+            const response = await ctx.remote.session.modelCatalog();
+            if (response?.ok === true) {
+              const groups = Array.isArray(response.value?.groups) ? response.value.groups : [];
+              catalog = groups.map((group) => ({
+                provider: group.id,
+                name: group.name ?? null,
+                models: (Array.isArray(group.models) ? group.models : []).map((model) => model.id),
+              }));
+            } else {
+              catalog = { error: response?.error?.code ?? 'model-catalog-failed' };
+            }
+          } catch (error) {
+            catalog = { error: String(error?.message ?? error) };
+          }
+          return {
+            ok: true,
+            sessionsService: ctx.sessions !== undefined,
+            remoteSession: typeof ctx.remote?.session?.selectModel === 'function',
+            sessionId: sessionId === undefined ? null : String(sessionId),
+            hasBinding,
+            selection: store.get().selection,
+            projection,
+            catalog,
+          };
+        };
+
+
+/** 调试：只改插件 UI 状态（不动 DSH 配置），用于检查「当前选择」高亮样式。 */
+        const highlightProbe = (input) => {
+          const provider = typeof input?.provider === 'string' ? input.provider : '';
+          const model = typeof input?.model === 'string' ? input.model : '';
+          if (input?.clear === true || provider === '' || model === '') {
+            const sessionId = store.get().sessionId;
+            let restored = null;
+            try {
+              const binding = sessionId === undefined ? undefined : ctx.sessions.binding(sessionId);
+              const projected = binding?.session?.projections?.faceOf?.('modelSelection');
+              const snapshot = projected?.getSnapshot?.();
+              const picked = snapshot?.next ?? snapshot?.lastUsed ?? null;
+              if (picked !== null && picked !== undefined) {
+                restored = { provider: picked.provider, model: picked.model };
+              }
+            } catch {
+              restored = null;
+            }
+            store.set({ selection: restored });
+            return { ok: true, cleared: true, selection: store.get().selection };
+          }
+          store.set({ selection: { provider, model } });
+          return { ok: true, cleared: false, selection: store.get().selection };
         };
 
         /** 只打开模型菜单并停在打开状态（供截图检查「添加模型」行）。 */
@@ -2413,7 +2515,7 @@ window.__ModuleLoader__.load({
               manifest: {
                 id: 'SelectModel',
                 description:
-                  'dsh-plugin-select-model 的只读自检：确认模型菜单底部的「添加模型」行已注入、点击后弹窗布局完整，并在结束时恢复现场。',
+                  'dsh-plugin-select-model 的自检：确认模型菜单底部的「添加模型」行已注入、弹窗布局完整、管理弹窗的选择/高亮状态，并在结束时恢复现场；除 highlightProbe 只改界面高亮外均为只读。',
                 methods: [
                   {
                     name: 'status',
@@ -2440,6 +2542,34 @@ window.__ModuleLoader__.load({
                       additionalProperties: false,
                     },
                     outputSchema: { description: '管理区行、搜索框与弹窗内容。' },
+                  },
+                  {
+                    name: 'selectionProbe',
+                    description:
+                      '只读：当前会话 id、用于高亮的模型选择（modelSelection 投影），以及 remote.session 是否可用。',
+                    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+                    outputSchema: { description: '会话与模型选择状态。' },
+                  },
+                  {
+                    name: 'manageState',
+                    description: '只读：读取当前已打开的管理弹窗（不打开/不关闭），检查每行的高亮、使用中标记与按钮状态。',
+                    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+                    outputSchema: { description: '管理弹窗每一行的当前状态。' },
+                  },
+                  {
+                    name: 'highlightProbe',
+                    description:
+                      '调试：只改界面的「当前选择」高亮（不写 DSH 配置）；传 provider/model 模拟某一行在用，传 clear 恢复为会话真实选择。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        provider: { type: 'string', description: '模拟的 provider（配置 ID，如 sel-…）' },
+                        model: { type: 'string', description: '模拟的模型 ID' },
+                        clear: { type: 'boolean', description: '恢复为会话真实选择' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '当前高亮状态。' },
                   },
                   {
                     name: 'menu',
@@ -2516,6 +2646,9 @@ window.__ModuleLoader__.load({
                 if (method === 'preview') return openPreview(input);
                 if (method === 'settingsProbe') return settingsProbe();
                 if (method === 'manage') return manageProbe(input);
+                if (method === 'manageState') return manageState();
+                if (method === 'selectionProbe') return selectionProbe();
+                if (method === 'highlightProbe') return highlightProbe(input);
                 if (method === 'directProbe') return directProbe(input);
                 if (method === 'modelProbe') return modelProbe(input);
                 if (method === 'close') return closePreview();
@@ -2530,7 +2663,7 @@ window.__ModuleLoader__.load({
     // ─────────────────────────────────────────────────────── 插件入口
 
     const plugin = {
-      inject: ['slots', 'locale', 'remote', 'remote.settings', 'remote.credentials'],
+      inject: ['slots', 'locale', 'sessions', 'remote', 'remote.settings', 'remote.credentials', 'remote.session'],
       /**
        * Client 插件主体：注册文案/样式、常驻弹窗宿主、模型菜单 DOM 增强、自检入口。
        * @param {object} ctx client 根上下文
@@ -2541,7 +2674,18 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ensureStyles(), 'select-model: styles');
 
         // 共享状态：菜单行点击 → 打开弹窗；提交 → 关闭 + Toast。
-        const store = createStore({ open: false, toast: null, editTarget: null, confirmTarget: null, manageOpen: false, manageVersion: 0 });
+        // sessionId / selection 由 session 作用域插槽里的探针同步：前者用来调 selectModel，
+        // 后者决定管理弹窗里哪一行高亮（「下次打开带高亮」就靠它，来自会话投影而非本地缓存）。
+        const store = createStore({
+          open: false,
+          toast: null,
+          editTarget: null,
+          confirmTarget: null,
+          manageOpen: false,
+          manageVersion: 0,
+          sessionId: undefined,
+          selection: null,
+        });
         let toastTimer = null;
 
         const showToast = (text) => {
@@ -2560,6 +2704,79 @@ window.__ModuleLoader__.load({
             toastTimer = null;
           },
           'select-model: toast timer',
+        );
+
+        // ── 当前会话与它的模型选择 ─────────────────────────────
+        // 管理弹窗挂在 shell.overlay（root 作用域），拿不到 sessionId；这里在会话作用域的
+        // 输入区插一个「只渲染 null」的探针，把 sessionId 与「当前生效的模型选择」同步进 store。
+        // 高亮读的是会话自己的 modelSelection 投影，因此换会话 / 刷新页面 / 下次打开都一致。
+        let sessionToken = 0;
+        let releaseSession = () => {};
+
+        /** 从 modelSelection 投影里取出当前生效的选择（优先下一轮生效的 next）。 */
+        const selectionFromSnapshot = (snapshot) => {
+          const picked = snapshot?.next ?? snapshot?.lastUsed ?? null;
+          if (picked === null || picked === undefined) return null;
+          if (typeof picked.provider !== 'string' || typeof picked.model !== 'string') return null;
+          return { provider: picked.provider, model: picked.model };
+        };
+
+        /** 读某个会话当前生效的模型选择；投影不可用时返回 null（界面退化为不高亮）。 */
+        const readSelection = (sessionId) => {
+          try {
+            const binding = ctx.sessions.binding(sessionId);
+            const projected = binding?.session?.projections?.faceOf?.('modelSelection');
+            return selectionFromSnapshot(projected?.getSnapshot?.());
+          } catch {
+            return null;
+          }
+        };
+
+        /** 跟随一个会话：写入 sessionId + 当前选择，并订阅投影变化。返回释放函数。 */
+        const followSession = (sessionId) => {
+          releaseSession();
+          const token = (sessionToken += 1);
+          let unsubscribe = () => {};
+          store.set({ sessionId, selection: readSelection(sessionId) });
+          try {
+            const binding = ctx.sessions.binding(sessionId);
+            const projected = binding?.session?.projections?.faceOf?.('modelSelection');
+            if (projected !== undefined && typeof projected.subscribe === 'function') {
+              unsubscribe = projected.subscribe(() => {
+                if (token !== sessionToken) return;
+                store.set({ selection: readSelection(sessionId) });
+              });
+            }
+          } catch {
+            /* 订阅失败就退化成每次打开管理弹窗时现读 */
+          }
+          const release = () => {
+            unsubscribe();
+            if (token === sessionToken) {
+              sessionToken += 1;
+              store.set({ sessionId: undefined, selection: null });
+            }
+          };
+          releaseSession = release;
+          return release;
+        };
+
+        /** 只负责同步当前会话，不渲染任何东西。 */
+        function SessionProbe({ sessionId }) {
+          useEffect(() => followSession(sessionId), [sessionId]);
+          return null;
+        }
+
+        ctx.slots.inject('conversation.input.left', () =>
+          ctx.slots.register(
+            {
+              name: 'conversation.input.left',
+              id: 'select-model-session-probe',
+              order: 900,
+              inject: (sessionId) => ({ sessionId }),
+            },
+            SessionProbe,
+          ),
         );
 
         /** 编辑一个已添加的模型（写回 llm-pi-ai；Key 留空保持不变）。 */
@@ -2771,11 +2988,13 @@ window.__ModuleLoader__.load({
           );
         }
 
-        /** 「已添加的第三方模型」管理弹窗：搜索 + 列表 + 编辑/删除。 */
+        /** 「已添加的第三方模型」管理弹窗：搜索 + 列表 + 选择/编辑/删除。 */
         function ManageDialog({ onClose }) {
           const version = useStoreValue(store, (state) => state.manageVersion);
+          const selection = useStoreValue(store, (state) => state.selection);
           const [items, setItems] = useState(null);
           const [query, setQuery] = useState('');
+          const [busyRoute, setBusyRoute] = useState(null);
 
           useEffect(() => {
             let alive = true;
@@ -2791,6 +3010,53 @@ window.__ModuleLoader__.load({
             };
           }, [version]);
 
+          // 打开时再对一次投影：探针可能还没挂（例如刚刷新页面就点进来）。
+          useEffect(() => {
+            const sessionId = store.get().sessionId;
+            if (sessionId !== undefined) store.set({ selection: readSelection(sessionId) });
+          }, []);
+
+          const isCurrent = (item) =>
+            selection !== null && selection.provider === item.route && selection.model === item.modelId;
+
+          /** 把当前会话切到这一项；失败按错误码给出可读原因。 */
+          const choose = async (item) => {
+            if (busyRoute !== null) return;
+            const sessionId = store.get().sessionId;
+            if (sessionId === undefined) {
+              showToast(t('select.noSession'));
+              return;
+            }
+            if (typeof ctx.remote?.session?.selectModel !== 'function') {
+              showToast(t('select.unavailable'));
+              return;
+            }
+            setBusyRoute(item.route);
+            try {
+              // 通过 remote 对象调用，保留它的 this（remote face 的方法不是脱离对象也能调用的函数）。
+              const result = await ctx.remote.session.selectModel({
+                sessionId,
+                provider: item.route,
+                model: item.modelId,
+              });
+              if (result?.ok === true) {
+                store.set({ selection: { provider: item.route, model: item.modelId } });
+                showToast(t('toast.selected', { model: item.displayName }));
+                return;
+              }
+              const code = result?.error?.code ?? '';
+              const detail = result?.error?.message ?? '';
+              if (code === 'session/writer-held') showToast(t('select.writerHeld'));
+              else if (code === 'session/model-unavailable') showToast(t('select.modelUnavailable'));
+              else if (code === 'session/not-found') showToast(t('select.sessionLost'));
+              else showToast(t('select.failed', { detail: detail || code || 'unknown' }));
+            } catch (error) {
+              showToast(t('select.failed', { detail: String(error?.message ?? error) }));
+            } finally {
+              setBusyRoute(null);
+            }
+          };
+
           const needle = query.trim().toLowerCase();
           const filtered =
             items === null
@@ -2800,6 +3066,66 @@ window.__ModuleLoader__.load({
                 : items.filter((item) =>
                     `${item.displayName} ${item.modelId} ${item.baseURL}`.toLowerCase().includes(needle),
                   );
+
+          const renderRow = (item) => {
+            const current = isCurrent(item);
+            const busy = busyRoute === item.route;
+            return h(
+              'div',
+              {
+                className: 'dsm-manageRow',
+                key: item.route,
+                'data-current': current ? '1' : undefined,
+                'data-testid': 'select-model-manage-row',
+              },
+              h(
+                'div',
+                { className: 'dsm-manageMain' },
+                h(
+                  'div',
+                  { className: 'dsm-manageTitle' },
+                  h('span', { className: 'dsm-manageName', title: item.displayName }, item.displayName),
+                  current ? h('span', { className: 'dsm-manageBadge' }, t('manage.current')) : null,
+                ),
+                h('span', { className: 'dsm-manageSub', title: item.modelId }, item.modelId || item.baseURL),
+              ),
+              h(
+                'div',
+                { className: 'dsm-manageActions' },
+                h(
+                  DsmButton,
+                  {
+                    size: 'sm',
+                    variant: current ? 'ghost' : 'primary',
+                    disabled: current || busyRoute !== null,
+                    'data-action': 'select',
+                    onClick: () => void choose(item),
+                  },
+                  current ? t('manage.selected') : busy ? t('manage.selecting') : t('manage.select'),
+                ),
+                h(
+                  DsmButton,
+                  {
+                    size: 'sm',
+                    variant: 'ghost',
+                    'data-action': 'edit',
+                    onClick: () => store.set({ editTarget: item }),
+                  },
+                  t('manage.edit'),
+                ),
+                h(
+                  DsmButton,
+                  {
+                    size: 'sm',
+                    variant: 'danger',
+                    'data-action': 'delete',
+                    onClick: () => store.set({ confirmTarget: item }),
+                  },
+                  t('manage.delete'),
+                ),
+              ),
+            );
+          };
 
           return h(
             'div',
@@ -2840,36 +3166,7 @@ window.__ModuleLoader__.load({
                     ? h('div', { className: 'dsm-manageEmpty' }, t('manage.loading'))
                     : filtered.length === 0
                       ? h('div', { className: 'dsm-manageEmpty' }, t('manage.empty'))
-                      : h(
-                          'div',
-                          { className: 'dsm-manageList' },
-                          filtered.map((item) =>
-                            h(
-                              'div',
-                              { className: 'dsm-manageRow', key: item.route },
-                              h(
-                                'div',
-                                { className: 'dsm-manageMain' },
-                                h('span', { className: 'dsm-manageName', title: item.displayName }, item.displayName),
-                                h('span', { className: 'dsm-manageSub', title: item.modelId }, item.modelId || item.baseURL),
-                              ),
-                              h(
-                                'div',
-                                { className: 'dsm-manageActions' },
-                                h(
-                                  DsmButton,
-                                  { size: 'sm', variant: 'ghost', onClick: () => store.set({ editTarget: item }) },
-                                  t('manage.edit'),
-                                ),
-                                h(
-                                  DsmButton,
-                                  { size: 'sm', variant: 'danger', onClick: () => store.set({ confirmTarget: item }) },
-                                  t('manage.delete'),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      : h('div', { className: 'dsm-manageList' }, filtered.map(renderRow)),
                 ),
               ),
               h(
