@@ -20,9 +20,19 @@ window.__ModuleLoader__.load({
   id: 'dsh-plugin-select-model',
   factory(require) {
     const React = require('react');
-    const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+    const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
     const h = React.createElement;
     const Fragment = React.Fragment;
+    /** 下拉列表需要逃出弹窗的滚动容器，所以用 portal（react-dom 由页面模块表提供）。 */
+    let createPortal = (node) => node;
+    try {
+      const reactDom = require('react-dom');
+      if (typeof reactDom.createPortal === 'function') createPortal = reactDom.createPortal;
+    } catch {
+      /* 没有 react-dom 时退化成普通渲染：fixed 定位仍然可用 */
+    }
+    /** 模型列表接口（Host 半边提供，见 index.js）。 */
+    const MODELS_ROUTE = '/api/select-model/models';
 
     // ─────────────────────────────────────────────────────── 常量
 
@@ -69,8 +79,31 @@ window.__ModuleLoader__.load({
       'field.baseUrl': '接口地址',
       'field.baseUrlPlaceholder': 'https://…/v1',
       'field.model': '模型名称',
-      'field.modelPlaceholder': '可选，例如 gpt-4o',
+      'field.modelPlaceholder': '选择或输入模型 ID',
+      'field.modelCustomPlaceholder': '输入模型 ID，例如 my-model',
       'tag.optional': '可选',
+
+      'model.loading': '正在从平台获取模型列表…',
+      'model.live': '来自平台 · 共 {n} 个模型',
+      'model.fallback': '常用模型 · 填写 API Key 后自动获取平台列表',
+      'model.failed': '自动获取失败（{reason}），以下是常用模型，也可手动输入',
+      'model.search': '搜索模型…',
+      'model.empty': '没有匹配的模型',
+      'model.refresh': '刷新',
+      'model.listAria': '模型列表',
+      'model.customHint': '自定义服务商：直接输入模型 ID，不做平台校验。',
+
+      'model.err.http_401': 'API Key 无效或没有权限',
+      'model.err.http_403': 'API Key 无效或没有权限',
+      'model.err.http_404': '接口地址不对，或该平台不提供模型列表接口',
+      'model.err.http_429': '请求太频繁，请稍后再试',
+      'model.err.network-error': '无法连接，请检查接口地址与网络',
+      'model.err.timeout': '请求超时',
+      'model.err.empty-list': '平台没有返回模型',
+      'model.err.invalid-json': '返回内容不是模型列表',
+      'model.err.invalid-base-url': '接口地址格式不对',
+      'model.err.request-failed': '请求失败',
+      'model.err.unknown': '未知错误',
 
       'action.cancel': '取消',
       'action.add': '添加模型',
@@ -78,8 +111,8 @@ window.__ModuleLoader__.load({
       'action.hide': '隐藏',
       'action.close': '关闭',
 
-      'hint.localOnly': 'API Key 只会保存在本机，不会上传到任何服务器。',
-      'note.preview': '界面布局预览：模型接入逻辑将在下一步实现。',
+      'hint.localOnly': 'API Key 只在本次请求中经本机转发，不落盘、不上传到第三方以外的地方。',
+      'note.preview': '模型列表会从所选平台实时获取；获取失败时展示常用模型，也可以手动输入。',
       'toast.saved': '已保存配置草稿（模型接入尚未实现）',
     };
 
@@ -108,9 +141,32 @@ window.__ModuleLoader__.load({
       'field.apiKeyPlaceholder': 'Paste sk-…',
       'field.baseUrl': 'Base URL',
       'field.baseUrlPlaceholder': 'https://…/v1',
-      'field.model': 'Model name',
-      'field.modelPlaceholder': 'Optional, e.g. gpt-4o',
+      'field.model': 'Model',
+      'field.modelPlaceholder': 'Pick or type a model ID',
+      'field.modelCustomPlaceholder': 'Type a model ID, e.g. my-model',
       'tag.optional': 'Optional',
+
+      'model.loading': 'Fetching the model list from the provider…',
+      'model.live': 'Live from provider · {n} models',
+      'model.fallback': 'Common models · enter an API key to fetch the live list',
+      'model.failed': 'Automatic fetch failed ({reason}); showing common models — you can still type one.',
+      'model.search': 'Search models…',
+      'model.empty': 'No matching models',
+      'model.refresh': 'Refresh',
+      'model.listAria': 'Model list',
+      'model.customHint': 'Custom provider: type a model ID directly; no platform check.',
+
+      'model.err.http_401': 'invalid API key or no permission',
+      'model.err.http_403': 'invalid API key or no permission',
+      'model.err.http_404': 'wrong base URL, or the provider has no model list endpoint',
+      'model.err.http_429': 'too many requests; try again later',
+      'model.err.network-error': 'cannot connect; check the base URL and network',
+      'model.err.timeout': 'request timed out',
+      'model.err.empty-list': 'the provider returned no models',
+      'model.err.invalid-json': 'the response is not a model list',
+      'model.err.invalid-base-url': 'the base URL is malformed',
+      'model.err.request-failed': 'request failed',
+      'model.err.unknown': 'unknown error',
 
       'action.cancel': 'Cancel',
       'action.add': 'Add model',
@@ -118,8 +174,8 @@ window.__ModuleLoader__.load({
       'action.hide': 'Hide',
       'action.close': 'Close',
 
-      'hint.localOnly': 'The API key stays on this machine and is never uploaded.',
-      'note.preview': 'Layout preview: the model wiring lands in the next step.',
+      'hint.localOnly': 'The API key is only relayed through this machine for this request; it is not persisted.',
+      'note.preview': 'The model list is fetched live from the selected provider; when that fails, common models are shown and you can type your own.',
       'toast.saved': 'Draft saved (model wiring is not implemented yet)',
     };
 
@@ -127,7 +183,9 @@ window.__ModuleLoader__.load({
 
     /**
      * 第三方服务商预设。badge/color 只用于弹窗里的小色块，不复制任何品牌图标。
-     * @type {ReadonlyArray<{id:string,name:string,hintKey:string,baseUrl:string,keyPlaceholder:string,color:string,badge:string}>}
+     * protocol 决定 Host 代理怎么向平台要模型列表；fallbackModels 是拿不到
+     * 平台列表时（没填 Key / 网络失败）展示的常用型号，用户仍可手动输入。
+     * @type {ReadonlyArray<{id:string,name:string,hintKey:string,baseUrl:string,keyPlaceholder:string,color:string,badge:string,protocol:string,publicModels?:boolean,fallbackModels:ReadonlyArray<{id:string,label?:string}>}>}
      */
     const PROVIDERS = Object.freeze([
       {
@@ -138,6 +196,15 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#10a37f',
         badge: 'O',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'gpt-4o' },
+          { id: 'gpt-4o-mini' },
+          { id: 'gpt-4.1' },
+          { id: 'gpt-4.1-mini' },
+          { id: 'o3' },
+          { id: 'o4-mini' },
+        ],
       },
       {
         id: 'anthropic',
@@ -147,6 +214,13 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-ant-…',
         color: '#d97757',
         badge: 'A',
+        protocol: 'anthropic',
+        fallbackModels: [
+          { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+          { id: 'claude-opus-4-1', label: 'Claude Opus 4.1' },
+          { id: 'claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet' },
+          { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
+        ],
       },
       {
         id: 'google',
@@ -156,6 +230,13 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'AIza…',
         color: '#4285f4',
         badge: 'G',
+        protocol: 'google',
+        fallbackModels: [
+          { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+          { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
+          { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+        ],
       },
       {
         id: 'deepseek',
@@ -165,6 +246,11 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#4d6bfe',
         badge: 'D',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+          { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
+        ],
       },
       {
         id: 'dashscope',
@@ -174,6 +260,14 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#ff6a00',
         badge: '百',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'qwen-max', label: 'Qwen Max' },
+          { id: 'qwen-plus', label: 'Qwen Plus' },
+          { id: 'qwen-turbo', label: 'Qwen Turbo' },
+          { id: 'qwen3-coder-plus', label: 'Qwen3 Coder Plus' },
+          { id: 'qwen-vl-max', label: 'Qwen VL Max' },
+        ],
       },
       {
         id: 'zhipu',
@@ -183,6 +277,13 @@ window.__ModuleLoader__.load({
         keyPlaceholder: '…',
         color: '#3859ff',
         badge: '智',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'glm-4.6', label: 'GLM-4.6' },
+          { id: 'glm-4.5', label: 'GLM-4.5' },
+          { id: 'glm-4.5-air', label: 'GLM-4.5 Air' },
+          { id: 'glm-4-plus', label: 'GLM-4 Plus' },
+        ],
       },
       {
         id: 'moonshot',
@@ -192,6 +293,13 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#1f1f1f',
         badge: 'K',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'kimi-k2-0905-preview', label: 'Kimi K2 0905' },
+          { id: 'kimi-k2-turbo-preview', label: 'Kimi K2 Turbo' },
+          { id: 'moonshot-v1-32k', label: 'Moonshot v1 32K' },
+          { id: 'moonshot-v1-8k', label: 'Moonshot v1 8K' },
+        ],
       },
       {
         id: 'siliconflow',
@@ -201,6 +309,13 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#7c4dff',
         badge: '硅',
+        protocol: 'openai',
+        fallbackModels: [
+          { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
+          { id: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek R1' },
+          { id: 'Qwen/Qwen3-235B-A22B', label: 'Qwen3 235B' },
+          { id: 'moonshotai/Kimi-K2-Instruct', label: 'Kimi K2 Instruct' },
+        ],
       },
       {
         id: 'openrouter',
@@ -210,6 +325,15 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-or-…',
         color: '#6467f2',
         badge: 'R',
+        protocol: 'openrouter',
+        publicModels: true,
+        fallbackModels: [
+          { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o' },
+          { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
+          { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+          { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat' },
+          { id: 'qwen/qwen3-235b-a22b', label: 'Qwen3 235B' },
+        ],
       },
       {
         id: 'custom',
@@ -219,6 +343,8 @@ window.__ModuleLoader__.load({
         keyPlaceholder: 'sk-…',
         color: '#6b7280',
         badge: '+',
+        protocol: 'openai',
+        fallbackModels: [],
       },
     ]);
 
@@ -240,13 +366,13 @@ window.__ModuleLoader__.load({
 .dsm-close{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary,#a3a3a3);font-size:18px;line-height:1;cursor:pointer;padding:0 0 2px}
 .dsm-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));color:var(--dsw-alias-label-primary,#e6e6e6)}
 .dsm-desc{margin:0;padding:0 24px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary,#e6e6e6)}
-.dsm-body{display:flex;flex-direction:column;gap:18px;margin-top:20px;padding:0 24px;min-height:0;overflow-y:auto;max-height:min(64vh,540px)}
-.dsm-note{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-module-platform,rgba(127,127,127,.10));color:var(--dsw-alias-label-secondary,#a3a3a3);font-size:12px;line-height:18px}
+.dsm-body{display:flex;flex-direction:column;gap:14px;margin-top:20px;padding:0 24px;min-height:0;overflow-y:auto;max-height:min(64vh,540px)}
+.dsm-note{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-module-platform,rgba(127,127,127,.10));color:var(--dsw-alias-label-secondary,#a3a3a3);font-size:12px;line-height:18px}
 .dsm-noteMark{flex:none;font-size:12px;line-height:18px;color:var(--dsw-alias-brand-primary,#4d6bfe)}
 .dsm-section{display:flex;flex-direction:column;min-width:0}
 .dsm-sectionTitle{margin:0 0 8px;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-secondary,#a3a3a3)}
 .dsm-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.dsm-provider{position:relative;display:flex;align-items:center;gap:8px;box-sizing:border-box;min-height:52px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.06));color:var(--dsw-alias-label-primary,#e6e6e6);font:inherit;text-align:left;cursor:pointer;transition:background .12s ease,border-color .12s ease}
+.dsm-provider{position:relative;display:flex;align-items:center;gap:8px;box-sizing:border-box;min-height:50px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.06));color:var(--dsw-alias-label-primary,#e6e6e6);font:inherit;text-align:left;cursor:pointer;transition:background .12s ease,border-color .12s ease}
 .dsm-provider:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.14))}
 .dsm-provider:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4d6bfe);outline-offset:1px}
 .dsm-provider[data-selected="1"]{border-color:var(--dsw-alias-brand-primary,#4d6bfe);background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));box-shadow:inset 0 0 0 1px var(--dsw-alias-brand-primary,#4d6bfe)}
@@ -255,9 +381,9 @@ window.__ModuleLoader__.load({
 .dsm-providerName{font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dsm-providerHint{font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary,#8a8a8a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dsm-providerCheck{position:absolute;top:5px;right:6px;color:var(--dsw-alias-brand-primary,#4d6bfe);font-size:11px;line-height:1}
-.dsm-field{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.dsm-field{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .dsm-field:first-child{margin-top:0}
-.dsm-row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.dsm-row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
 .dsm-row2 .dsm-field{margin-top:0}
 .dsm-label{display:flex;align-items:center;gap:6px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#a3a3a3)}
 .dsm-labelTag{font-size:10px;line-height:14px;padding:0 5px;border-radius:999px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));color:var(--dsw-alias-label-tertiary,#8a8a8a)}
@@ -278,6 +404,30 @@ window.__ModuleLoader__.load({
 .dsm-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4d6bfe);outline-offset:1px}
 .dsm-toast{position:fixed;left:50%;bottom:32px;z-index:1300;display:flex;align-items:center;gap:8px;max-width:min(520px,calc(100vw - 48px));padding:8px 14px;border-radius:999px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));background:var(--dsw-alias-bg-overlay,#2a2a2a);color:var(--dsw-alias-label-primary,#e6e6e6);box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.35));font-size:12px;line-height:18px;transform:translateX(-50%);pointer-events:none;animation:dsmToastIn .16s ease-out}
 .dsm-toastMark{flex:none;color:var(--dsw-alias-state-success-primary,#3fb950);font-size:12px;line-height:18px}
+.dsm-modelRow{display:flex;align-items:center;gap:8px;min-width:0}
+.dsm-modelBtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary,#a3a3a3);cursor:pointer;font-size:12px;line-height:1;padding:0}
+.dsm-modelBtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));color:var(--dsw-alias-label-primary,#e6e6e6)}
+.dsm-modelBtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4d6bfe);outline-offset:1px}
+.dsm-modelStatus{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8a8a);min-height:16px}
+.dsm-modelStatus[data-tone="error"]{color:var(--dsw-alias-state-error-primary,#f85149)}
+.dsm-modelStatus[data-tone="live"]{color:var(--dsw-alias-state-success-primary,#3fb950)}
+.dsm-modelMenu{position:fixed;z-index:1400;display:flex;flex-direction:column;max-height:320px;padding:6px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-overlay,#2a2a2a);box-shadow:var(--dsw-elevation-prominent,0 12px 32px rgba(0,0,0,.4));color:var(--dsw-alias-label-primary,#e6e6e6);animation:dsmPop .12s ease-out}
+.dsm-modelHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 6px 6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#a3a3a3)}
+.dsm-modelHeadText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsm-modelSearch{display:flex;align-items:center;height:28px;margin:0 2px 6px;padding:0 8px;border:.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.34));border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.06))}
+.dsm-modelSearch input{flex:1;min-width:0;border:none;outline:none;background:transparent;color:var(--dsw-alias-label-primary,#e6e6e6);font-family:inherit;font-size:12px;line-height:18px}
+.dsm-modelSearch input::placeholder{color:var(--dsw-alias-label-dimmed,#6b6b6b)}
+.dsm-modelList{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:1px}
+.dsm-modelItem{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:6px 8px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dsm-modelItem:hover,.dsm-modelItem[data-active="1"]{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16))}
+.dsm-modelItem:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4d6bfe);outline-offset:-1px}
+.dsm-modelItemMain{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.dsm-modelItemLabel{font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsm-modelItemId{font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary,#8a8a8a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsm-modelItemCheck{flex:none;color:var(--dsw-alias-state-success-primary,#3fb950);font-size:12px;line-height:1}
+.dsm-modelEmpty{padding:10px 8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-modelRefresh{flex:none;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary,#a3a3a3);font-family:inherit;font-size:11px;line-height:16px;padding:2px 6px;cursor:pointer}
+.dsm-modelRefresh:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));color:var(--dsw-alias-label-primary,#e6e6e6)}
 @keyframes dsmPop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
 @keyframes dsmToastIn{from{opacity:0;transform:translate(-50%,4px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (max-width:560px){.dsm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dsm-dialog{width:100%}}
@@ -508,7 +658,21 @@ window.__ModuleLoader__.load({
     }
 
     /** 主题化输入框外壳。 */
-    function DsmInput({ value, onChange, type = 'text', placeholder, ariaLabel, inputRef }) {
+    function DsmInput({
+      value,
+      onChange,
+      type = 'text',
+      placeholder,
+      ariaLabel,
+      inputRef,
+      onKeyDown,
+      onFocus,
+      onBlur,
+      readOnly,
+      role,
+      ariaExpanded,
+      ariaControls,
+    }) {
       return h(
         'span',
         { className: 'dsm-input' },
@@ -518,9 +682,16 @@ window.__ModuleLoader__.load({
           type,
           value,
           placeholder,
+          role,
+          readOnly: readOnly === true,
           'aria-label': ariaLabel,
+          'aria-expanded': ariaExpanded,
+          'aria-controls': ariaControls,
           spellCheck: false,
           autoComplete: 'off',
+          onKeyDown,
+          onFocus,
+          onBlur,
           onChange: (event) => {
             if (typeof onChange === 'function') onChange(event.target.value);
           },
@@ -540,6 +711,390 @@ window.__ModuleLoader__.load({
           tag !== undefined ? h('span', { className: 'dsm-labelTag' }, tag) : null,
         ),
         children,
+      );
+    }
+
+    // ─────────────────────────────────────────────────────── 模型选择器
+
+    /** 把 Host 返回的错误码翻译成用户可读的一句话；未知错误码给出兜底文案。 */
+    function describeModelError(t, code) {
+      const key = `model.err.${code}`;
+      const text = t(key);
+      return text === key ? t('model.err.unknown') : text;
+    }
+
+    /**
+     * 模型选择器。
+     * 预设服务商：从平台实时拉取真实模型列表（可下拉选择、可搜索、也可手输），
+     * 拉取失败或还没填 Key 时退回该服务商的常用型号；自定义服务商只手输。
+     * @param {object} props
+     * @param {object} props.provider 当前服务商预设
+     * @param {string} props.apiKey 当前输入的 API Key
+     * @param {string} props.baseUrl 当前输入的接口地址
+     * @param {string} props.value 已选 / 已输入的模型 ID
+     * @param {(next:string) => void} props.onChange 模型 ID 变化
+     * @param {(key:string, vars?:object) => string} props.t 翻译
+     */
+    function ModelPicker({ provider, apiKey, baseUrl, value, onChange, t }) {
+      const isCustom = provider.id === 'custom';
+      const [open, setOpen] = useState(false);
+      const [models, setModels] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [errorCode, setErrorCode] = useState(null);
+      const [query, setQuery] = useState('');
+      const [menuRect, setMenuRect] = useState(null);
+      const anchorRef = useRef(null);
+      const menuRef = useRef(null);
+      const searchRef = useRef(null);
+      const requestSeq = useRef(0);
+      const listId = 'dsm-model-list';
+
+      const source = models ?? provider.fallbackModels;
+      const filtered = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (needle === '') return source;
+        return source.filter((item) => `${item.id} ${item.label ?? ''}`.toLowerCase().includes(needle));
+      }, [source, query]);
+
+      /** 询问 Host 代理：按当前服务商 / 地址 / Key 拉取平台模型列表。 */
+      const fetchModels = useCallback(async () => {
+        if (provider.id === 'custom') return;
+        const trimmedBase = (baseUrl.trim() || provider.baseUrl).trim();
+        if (trimmedBase === '') {
+          setErrorCode('invalid-base-url');
+          return;
+        }
+        const seq = requestSeq.current + 1;
+        requestSeq.current = seq;
+        setLoading(true);
+        setErrorCode(null);
+        try {
+          const response = await fetch(MODELS_ROUTE, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              providerId: provider.id,
+              protocol: provider.protocol,
+              baseUrl: trimmedBase,
+              apiKey: apiKey.trim(),
+            }),
+          });
+          const data = await response.json().catch(() => null);
+          if (requestSeq.current !== seq) return;
+          if (response.status === 404) {
+            // Host 半边的路由还没随重启加载：先安静地用常用型号列表。
+            setModels(null);
+            setErrorCode('route-missing');
+            return;
+          }
+          if (data !== null && data.ok === true && Array.isArray(data.models) && data.models.length > 0) {
+            setModels(
+              data.models.map((item) => ({
+                id: String(item.id),
+                label:
+                  typeof item.label === 'string' && item.label !== '' ? item.label : String(item.id),
+              })),
+            );
+            setErrorCode(null);
+          } else {
+            setModels(null);
+            setErrorCode(data !== null && typeof data.error === 'string' ? data.error : 'request-failed');
+          }
+        } catch {
+          if (requestSeq.current === seq) {
+            setModels(null);
+            setErrorCode('network-error');
+          }
+        } finally {
+          if (requestSeq.current === seq) setLoading(false);
+        }
+      }, [provider.id, provider.baseUrl, provider.protocol, baseUrl, apiKey]);
+
+      const canFetch = provider.publicModels === true || apiKey.trim() !== '';
+
+      // 服务商切换：清空模型列表、搜索词与下拉状态（避免把上一个平台的模型带过来）。
+      useEffect(() => {
+        setModels(null);
+        setErrorCode(null);
+        setQuery('');
+        setOpen(false);
+      }, [provider.id]);
+
+      // Key / 地址就绪后自动拉取（防抖），公开列表的服务商不需要 Key。
+      useEffect(() => {
+        if (provider.id === 'custom' || !canFetch) {
+          requestSeq.current += 1; // 作废进行中的请求
+          setModels(null);
+          setErrorCode(null);
+          setLoading(false);
+          return undefined;
+        }
+        const timer = window.setTimeout(() => {
+          void fetchModels();
+        }, 650);
+        return () => {
+          window.clearTimeout(timer);
+        };
+      }, [provider.id, canFetch, fetchModels]);
+
+      /** 计算下拉位置：优先向下，底部空间不足时向上；左右夹在视口内。 */
+      const updateRect = useCallback(() => {
+        const node = anchorRef.current;
+        if (node === null) return;
+        const rect = node.getBoundingClientRect();
+        const width = Math.max(280, Math.min(rect.width, 440));
+        const below = window.innerHeight - rect.bottom - 12;
+        const above = rect.top - 12;
+        const dropUp = below < 220 && above > below;
+        const maxHeight = Math.max(180, Math.min(320, dropUp ? above : below));
+        let left = rect.left;
+        if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
+        setMenuRect({
+          left: Math.max(12, left),
+          width,
+          maxHeight,
+          ...(dropUp ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+        });
+      }, []);
+
+      // 打开时定位，并跟随窗口尺寸 / 滚动更新；点外部关闭；Escape 关闭。
+      useLayoutEffect(() => {
+        if (!open) return undefined;
+        updateRect();
+        const onResize = () => updateRect();
+        const onScroll = (event) => {
+          if (menuRef.current !== null && event.target instanceof Node && menuRef.current.contains(event.target)) {
+            return;
+          }
+          updateRect();
+        };
+        window.addEventListener('resize', onResize);
+        window.addEventListener('scroll', onScroll, true);
+        return () => {
+          window.removeEventListener('resize', onResize);
+          window.removeEventListener('scroll', onScroll, true);
+        };
+      }, [open, updateRect]);
+
+      useEffect(() => {
+        if (!open) return undefined;
+        const onMouseDown = (event) => {
+          const target = event.target;
+          if (anchorRef.current?.contains(target)) return;
+          if (menuRef.current?.contains(target)) return;
+          setOpen(false);
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        return () => {
+          document.removeEventListener('mousedown', onMouseDown);
+        };
+      }, [open]);
+
+      // 列表较长时把焦点放进搜索框，方便直接筛。
+      useEffect(() => {
+        if (!open || source.length <= 10) return undefined;
+        const timer = window.setTimeout(() => {
+          searchRef.current?.focus();
+        }, 40);
+        return () => {
+          window.clearTimeout(timer);
+        };
+      }, [open, source.length]);
+
+      const choose = (item) => {
+        onChange(item.id);
+        setQuery('');
+        setOpen(false);
+      };
+
+      const toggleOpen = () => {
+        if (isCustom) return;
+        setQuery('');
+        setOpen((current) => {
+          if (current) return false;
+          if (models === null && errorCode === null) void fetchModels();
+          return true;
+        });
+      };
+
+      const onInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+          if (isCustom) return; // 交给弹窗的 Enter 提交逻辑
+          event.preventDefault();
+          event.stopPropagation();
+          if (!open) {
+            toggleOpen();
+            return;
+          }
+          const first = filtered[0];
+          if (first !== undefined) choose(first);
+          return;
+        }
+        if (event.key === 'Escape' && open) {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          return;
+        }
+        if (event.key === 'ArrowDown' && !isCustom) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!open) toggleOpen();
+        }
+      };
+
+      const hardError = errorCode !== null && errorCode !== 'route-missing';
+      const statusText = isCustom
+        ? t('model.customHint')
+        : loading
+          ? t('model.loading')
+          : hardError
+            ? t('model.failed', { reason: describeModelError(t, errorCode) })
+            : models !== null
+              ? t('model.live', { n: models.length })
+              : t('model.fallback');
+      const statusTone = !loading && hardError ? 'error' : models !== null && !loading ? 'live' : undefined;
+
+      const menu =
+        open && menuRect !== null && typeof document !== 'undefined'
+          ? createPortal(
+              h(
+                'div',
+                {
+                  ref: menuRef,
+                  className: 'dsm-modelMenu',
+                  id: listId,
+                  role: 'listbox',
+                  'aria-label': t('model.listAria'),
+                  style: menuRect,
+                  onMouseDown: (event) => {
+                    event.preventDefault();
+                  },
+                },
+                h(
+                  'div',
+                  { className: 'dsm-modelHead' },
+                  h(
+                    'span',
+                    { className: 'dsm-modelHeadText' },
+                    loading
+                      ? t('model.loading')
+                      : models !== null
+                        ? t('model.live', { n: models.length })
+                        : t('model.fallback'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dsm-modelRefresh',
+                      onClick: () => {
+                        void fetchModels();
+                      },
+                    },
+                    loading ? '…' : t('model.refresh'),
+                  ),
+                ),
+                source.length > 10
+                  ? h(
+                      'span',
+                      { className: 'dsm-modelSearch' },
+                      h('input', {
+                        ref: searchRef,
+                        value: query,
+                        placeholder: t('model.search'),
+                        'aria-label': t('model.search'),
+                        spellCheck: false,
+                        onChange: (event) => {
+                          setQuery(event.target.value);
+                        },
+                      }),
+                    )
+                  : null,
+                h(
+                  'div',
+                  { className: 'dsm-modelList' },
+                  loading && source.length === 0
+                    ? h('div', { className: 'dsm-modelEmpty' }, t('model.loading'))
+                    : filtered.length === 0
+                      ? h('div', { className: 'dsm-modelEmpty' }, t('model.empty'))
+                      : filtered.map((item) =>
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              key: item.id,
+                              className: 'dsm-modelItem',
+                              role: 'option',
+                              'aria-selected': value === item.id,
+                              title: item.id,
+                              onClick: () => {
+                                choose(item);
+                              },
+                            },
+                            h(
+                              'span',
+                              { className: 'dsm-modelItemMain' },
+                              h(
+                                'span',
+                                { className: 'dsm-modelItemLabel' },
+                                item.label !== undefined && item.label !== item.id ? item.label : item.id,
+                              ),
+                              item.label !== undefined && item.label !== item.id
+                                ? h('span', { className: 'dsm-modelItemId' }, item.id)
+                                : null,
+                            ),
+                            value === item.id
+                              ? h('span', { className: 'dsm-modelItemCheck', 'aria-hidden': 'true' }, '✓')
+                              : null,
+                          ),
+                        ),
+                ),
+              ),
+              document.body,
+            )
+          : null;
+
+      return h(
+        Fragment,
+        null,
+        h(
+          'div',
+          { className: 'dsm-modelRow' },
+          h(
+            'span',
+            { ref: anchorRef, style: { flex: '1 1 auto', minWidth: 0, display: 'flex' } },
+            h(DsmInput, {
+              value,
+              onChange,
+              placeholder: isCustom ? t('field.modelCustomPlaceholder') : t('field.modelPlaceholder'),
+              ariaLabel: t('field.model'),
+              role: isCustom ? undefined : 'combobox',
+              ariaExpanded: isCustom ? undefined : open,
+              ariaControls: isCustom ? undefined : listId,
+              onKeyDown: onInputKeyDown,
+            }),
+          ),
+          isCustom
+            ? null
+            : h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dsm-modelBtn',
+                  'aria-label': t('model.listAria'),
+                  'aria-expanded': open,
+                  onClick: toggleOpen,
+                },
+                '⌄',
+              ),
+        ),
+        h(
+          'div',
+          { className: 'dsm-modelStatus', 'data-tone': statusTone },
+          h('span', null, statusText),
+        ),
+        menu,
       );
     }
 
@@ -612,6 +1167,8 @@ window.__ModuleLoader__.load({
 
       const chooseProvider = (next) => {
         setProviderId(next.id);
+        // 服务商换了，模型 ID 一定不能沿用上一个平台的。
+        setModelName('');
         if (next.id !== 'custom') setBaseUrl(next.baseUrl);
       };
 
@@ -738,11 +1295,13 @@ window.__ModuleLoader__.load({
             h(
               DsmField,
               { label: t('field.model'), tag: t('tag.optional') },
-              h(DsmInput, {
+              h(ModelPicker, {
+                provider,
+                apiKey,
+                baseUrl,
                 value: modelName,
                 onChange: setModelName,
-                placeholder: t('field.modelPlaceholder'),
-                ariaLabel: t('field.model'),
+                t,
               }),
             ),
           ),
@@ -951,9 +1510,12 @@ window.__ModuleLoader__.load({
         };
 
         /** 打开模型菜单并点进「添加模型」弹窗，随后**停在打开状态**（供截图 / 目视检查）。 */
-        const openPreview = async () => {
+        const openPreview = async (input) => {
+          const providerId = typeof input?.providerId === 'string' ? input.providerId : null;
+          const openModels = input?.openModels === true;
           if (store.get().open === true) {
-            return { ok: true, alreadyOpen: true };
+            store.set({ open: false });
+            await waitFor(() => store.get().open === false, 800);
           }
           const trigger = findTrigger();
           if (trigger === null) return { ok: false, reason: 'model-trigger-not-found' };
@@ -974,24 +1536,113 @@ window.__ModuleLoader__.load({
             return { ok: false, reason: 'dialog-not-opened', menuRows };
           }
           await sleep(420); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
-          const rect = dialog.getBoundingClientRect();
+
+          // 可选：切到指定服务商（验证「换服务商 → 换模型列表」）。
+          let switchedProvider = null;
+          if (providerId !== null) {
+            const card = dialog.querySelector(`[data-provider-id="${providerId}"]`);
+            if (card instanceof HTMLElement) {
+              card.click();
+              switchedProvider = providerId;
+              await sleep(260);
+            }
+          }
+
+          // 可选：打开模型下拉并等列表返回（最多 8s）。
+          const pickerStatusNode = dialog.querySelector('.dsm-modelStatus');
+          const modelInput = dialog.querySelector('.dsm-modelRow input');
+          const picker = {
+            status: (pickerStatusNode?.textContent ?? '').trim(),
+            tone: pickerStatusNode?.getAttribute('data-tone') ?? null,
+            modelValue: modelInput instanceof HTMLInputElement ? modelInput.value : null,
+            hasDropdown: dialog.querySelector('.dsm-modelBtn') !== null,
+            dropdownOpen: false,
+            searchVisible: false,
+            itemCount: 0,
+            items: [],
+          };
+          if (openModels) {
+            const button = dialog.querySelector('.dsm-modelBtn');
+            if (button instanceof HTMLElement) {
+              button.click();
+              await waitFor(
+                () => {
+                  const menuNode = document.querySelector('.dsm-modelMenu');
+                  if (menuNode === null) return null;
+                  const items = menuNode.querySelectorAll('.dsm-modelItem').length;
+                  const statusNode = dialog.querySelector('.dsm-modelStatus');
+                  const status = (statusNode?.textContent ?? '').trim();
+                  const failed = status.includes('失败') || status.includes('failed');
+                  return items > 0 || failed ? true : null;
+                },
+                8000,
+              );
+            }
+            const menuNode = document.querySelector('.dsm-modelMenu');
+            const items = menuNode === null ? [] : Array.from(menuNode.querySelectorAll('.dsm-modelItem'));
+            picker.dropdownOpen = menuNode !== null;
+            picker.searchVisible = menuNode !== null && menuNode.querySelector('.dsm-modelSearch') !== null;
+            picker.itemCount = items.length;
+            picker.items = items.slice(0, 8).map((node) => (node.textContent ?? '').trim());
+          }
+
+          const finalRect = dialog.getBoundingClientRect();
           const body = dialog.querySelector('.dsm-body');
           const hint = dialog.querySelector('.dsm-hint');
           return {
             ok: true,
             menuRows,
             rowText: (row.textContent ?? '').trim(),
+            switchedProvider,
+            picker,
             dialog: {
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-              top: Math.round(rect.top),
-              left: Math.round(rect.left),
+              width: Math.round(finalRect.width),
+              height: Math.round(finalRect.height),
+              top: Math.round(finalRect.top),
+              left: Math.round(finalRect.left),
               bodyScrollHeight: body === null ? null : body.scrollHeight,
               bodyClientHeight: body === null ? null : body.clientHeight,
               hintVisible:
-                hint === null ? null : hint.getBoundingClientRect().bottom <= rect.bottom - 24,
+                hint === null ? null : hint.getBoundingClientRect().bottom <= finalRect.bottom - 24,
             },
           };
+        };
+
+        /** 直接探测 Host 的模型列表代理（不经过 UI），用于验证路由与归一化结果。 */
+        const modelProbe = async (input) => {
+          const startedAt = Date.now();
+          const body = {
+            providerId: typeof input?.providerId === 'string' ? input.providerId : 'openrouter',
+            protocol: typeof input?.protocol === 'string' ? input.protocol : 'openrouter',
+            baseUrl: typeof input?.baseUrl === 'string' ? input.baseUrl : 'https://openrouter.ai/api/v1',
+            apiKey: typeof input?.apiKey === 'string' ? input.apiKey : '',
+          };
+          try {
+            const response = await fetch(MODELS_ROUTE, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            const data = await response.json().catch(() => null);
+            return {
+              ok: response.ok && data !== null && data.ok === true,
+              status: response.status,
+              elapsedMs: Date.now() - startedAt,
+              protocol: data?.protocol ?? body.protocol,
+              error: data?.error ?? null,
+              detail: data?.detail ?? null,
+              count: data?.count ?? 0,
+              sample: Array.isArray(data?.models) ? data.models.slice(0, 8) : [],
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              status: 0,
+              elapsedMs: Date.now() - startedAt,
+              error: 'fetch-failed',
+              detail: String(error?.message ?? error),
+            };
+          }
         };
 
         /** 收起弹窗（以及可能残留的模型菜单），恢复现场。 */
@@ -1145,9 +1796,33 @@ window.__ModuleLoader__.load({
                   },
                   {
                     name: 'preview',
-                    description: '自动化：打开模型菜单并点进「添加模型」弹窗，保持打开状态，供截图或目视检查（用 close 收起）。',
-                    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-                    outputSchema: { description: '打开结果与弹窗尺寸。' },
+                    description:
+                      '自动化：打开模型菜单并点进「添加模型」弹窗，保持打开状态，供截图或目视检查（用 close 收起）。可选切到某个服务商并打开模型下拉，验证模型列表。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        providerId: { type: 'string', description: '可选：切到某个服务商，如 openrouter / anthropic' },
+                        openModels: { type: 'boolean', description: '可选：点开模型下列表并等待平台列表返回' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '打开结果、弹窗尺寸与模型选择器状态。' },
+                  },
+                  {
+                    name: 'modelProbe',
+                    description:
+                      '直接调用 Host 的模型列表代理（GET /api/select-model/models 的 POST 版本），验证路由与归一化结果；默认用 OpenRouter 的公开列表，无需 Key。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        providerId: { type: 'string', description: '服务商 id，默认 openrouter' },
+                        protocol: { type: 'string', description: 'openai | anthropic | google | openrouter，默认 openrouter' },
+                        baseUrl: { type: 'string', description: '接口地址，默认 https://openrouter.ai/api/v1' },
+                        apiKey: { type: 'string', description: '可选：仅用于这一次探测，不落盘' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '代理返回的状态、耗时、数量与样例模型。' },
                   },
                   {
                     name: 'close',
@@ -1157,11 +1832,12 @@ window.__ModuleLoader__.load({
                   },
                 ],
               },
-              async query(method) {
+              async query(method, input) {
                 if (method === 'status') return status();
                 if (method === 'selfTest') return selfTest();
                 if (method === 'menu') return openMenu();
-                if (method === 'preview') return openPreview();
+                if (method === 'preview') return openPreview(input);
+                if (method === 'modelProbe') return modelProbe(input);
                 if (method === 'close') return closePreview();
                 return { ok: false, error: `unknown-method:${method}` };
               },
