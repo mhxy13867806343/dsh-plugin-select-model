@@ -124,7 +124,10 @@ window.__ModuleLoader__.load({
       'manage.menuRow': '管理已添加模型',
       'manage.count': '{n} 个',
       'manage.loading': '加载中…',
-      'manage.done': '完成',
+      'manage.confirm': '确定',
+      'manage.prev': '上一页',
+      'manage.next': '下一页',
+      'manage.page': '第 {page} / {total} 页',
       'manage.title': '已添加的第三方模型',
       'manage.search': '搜索已添加…',
       'manage.empty': '还没有添加第三方模型',
@@ -136,7 +139,7 @@ window.__ModuleLoader__.load({
       'manage.current': '使用中',
       'select.noSession': '没有打开的对话，无法切换模型；先进入一个对话再试。',
       'select.unavailable': '当前环境不支持切换模型；刷新一下页面再试。',
-      'select.writerHeld': '当前对话正在生成回复，等这一轮结束后再切换。',
+      'select.writerHeld': '这个对话正被另一个窗口或进程占用，稍后再试；必要时刷新页面。',
       'select.modelUnavailable': '这个模型还没出现在模型目录里；重开一次模型菜单刷新后再试。',
       'select.sessionLost': '这个对话已经不在了，刷新页面后重试。',
       'select.failed': '切换失败：{detail}',
@@ -235,7 +238,10 @@ window.__ModuleLoader__.load({
       'manage.menuRow': 'Manage added models',
       'manage.count': '{n}',
       'manage.loading': 'Loading…',
-      'manage.done': 'Done',
+      'manage.confirm': 'OK',
+      'manage.prev': 'Previous',
+      'manage.next': 'Next',
+      'manage.page': 'Page {page} of {total}',
       'manage.title': 'Added third-party models',
       'manage.search': 'Search added models…',
       'manage.empty': 'No third-party models added yet',
@@ -247,7 +253,7 @@ window.__ModuleLoader__.load({
       'manage.current': 'In use',
       'select.noSession': 'No conversation is open, so there is no model to switch.',
       'select.unavailable': 'Model switching is unavailable here; refresh the page and try again.',
-      'select.writerHeld': 'This conversation is still generating; switch after the current turn ends.',
+      'select.writerHeld': 'This conversation is held by another window or process; try again shortly, or refresh the page.',
       'select.modelUnavailable': 'This model is not in the catalog yet; reopen the model menu to refresh it.',
       'select.sessionLost': 'This conversation no longer exists; refresh the page and try again.',
       'select.failed': 'Switch failed: {detail}',
@@ -493,6 +499,9 @@ window.__ModuleLoader__.load({
 .dsm-inputInner::placeholder{color:var(--dsw-alias-label-dimmed,#6b6b6b)}
 .dsm-hint{display:flex;align-items:flex-start;gap:6px;margin-top:4px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
 .dsm-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 24px}
+.dsm-manageFooter{justify-content:space-between;gap:12px}
+.dsm-pager{display:flex;align-items:center;gap:6px;min-width:0}
+.dsm-pagerLabel{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8a8a);white-space:nowrap;font-variant-numeric:tabular-nums}
 .dsm-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;border:none;border-radius:var(--dsw-radius-md,10px);cursor:pointer;font-family:inherit;font-size:14px;line-height:22px;padding:0 14px;height:36px;color:var(--dsw-alias-label-primary,#e6e6e6);background:transparent}
 .dsm-btn:disabled{cursor:not-allowed;opacity:.4}
 .dsm-btn[data-variant="primary"]{background:var(--dsw-alias-button-primary-fill,#3b6ff5);color:var(--dsw-alias-label-primary-foreground,#fff)}
@@ -1980,17 +1989,54 @@ window.__ModuleLoader__.load({
             })),
           }));
 
-        /** 只读：读取当前已经打开的管理弹窗（不打开/不关闭），用于检查高亮。 */
+        /** 管理弹窗的整体状态：标题、搜索、当前页的行、分页器与按钮。 */
+        const describeManageDialog = (dialog) => {
+          const pager = dialog.querySelector('[data-testid="select-model-manage-pager"]');
+          const prev = dialog.querySelector('.dsm-footer button[data-action="prev"]');
+          const next = dialog.querySelector('.dsm-footer button[data-action="next"]');
+          const footer = Array.from(dialog.querySelectorAll('.dsm-footer button')).map((button) => ({
+            text: (button.textContent ?? '').trim(),
+            action: button.getAttribute('data-action'),
+            disabled: button.disabled === true,
+          }));
+          return {
+            title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
+            hasSearch: dialog.querySelector('input') !== null,
+            rows: describeManageRows(dialog),
+            rowCount: dialog.querySelectorAll('.dsm-manageRow').length,
+            pager:
+              pager === null
+                ? null
+                : {
+                    label: (pager.textContent ?? '').trim(),
+                    prevDisabled: prev?.disabled === true,
+                    nextDisabled: next?.disabled === true,
+                  },
+            footer,
+          };
+        };
+
+        /** 只读：读取当前已经打开的管理弹窗（不打开/不关闭），用于检查高亮与分页。 */
         const manageState = () => {
           const dialog = document.querySelector('[data-testid="select-model-manage-dialog"]');
           if (dialog === null) return { ok: false, reason: 'manage-dialog-not-open' };
-          return { ok: true, rows: describeManageRows(dialog) };
+          return { ok: true, ...describeManageDialog(dialog) };
         };
 
-        /** 打开模型菜单 → 点「管理已添加模型」→ 读取管理弹窗；可试开编辑/删除弹窗（不保存/不删除）。 */
+        /** 打开模型菜单 → 点「管理已添加模型」→ 读取管理弹窗；可翻页或试开编辑/删除弹窗（不保存/不删除）。 */
         const manageProbe = async (input) => {
           const action =
-            input?.action === 'edit' ? 'edit' : input?.action === 'delete' ? 'delete' : 'none';
+            input?.action === 'edit'
+              ? 'edit'
+              : input?.action === 'delete'
+                ? 'delete'
+                : input?.action === 'prev'
+                  ? 'prev'
+                  : input?.action === 'next'
+                    ? 'next'
+                    : input?.action === 'confirm'
+                      ? 'confirm'
+                      : 'none';
           if (store.get().open === true || store.get().manageOpen === true) {
             store.set({ open: false, manageOpen: false });
           }
@@ -2032,14 +2078,26 @@ window.__ModuleLoader__.load({
           );
           await sleep(120);
           const rows = Array.from(dialog.querySelectorAll('.dsm-manageRow'));
-          result.manageDialog = {
-            title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
-            hasSearch: dialog.querySelector('input') !== null,
-            rowCount: rows.length,
-            rows: describeManageRows(dialog),
-          };
+          result.manageDialog = describeManageDialog(dialog);
           result.ok = rows.length >= 0;
-          if (action !== 'none' && rows.length > 0) {
+          if ((action === 'prev' || action === 'next') && rows.length > 0) {
+            const pagerButton = dialog.querySelector(`.dsm-footer button[data-action="${action}"]`);
+            if (pagerButton instanceof HTMLElement && pagerButton.disabled !== true) {
+              pagerButton.click();
+              await sleep(120);
+              result.manageDialog = describeManageDialog(dialog);
+            }
+          }
+          if (action === 'confirm') {
+            const confirmButton = dialog.querySelector('.dsm-footer button[data-action="confirm"]');
+            if (confirmButton instanceof HTMLElement) {
+              confirmButton.click();
+              await sleep(150);
+              result.confirmed = document.querySelector('[data-testid="select-model-manage-dialog"]') === null;
+              result.manageDialog = result.confirmed ? null : describeManageDialog(dialog);
+            }
+          }
+          if ((action === 'edit' || action === 'delete') && rows.length > 0) {
             const button = rows[0].querySelector(`button[data-action="${action}"]`);
             if (button instanceof HTMLElement) button.click();
             const modal =
@@ -2537,7 +2595,7 @@ window.__ModuleLoader__.load({
                     inputSchema: {
                       type: 'object',
                       properties: {
-                        action: { type: 'string', description: 'none | edit | delete（只打开弹窗，不保存/不删除），默认 none' },
+                        action: { type: 'string', description: 'none | prev | next | confirm | edit | delete（prev/next 翻页，confirm 点「确定」并确认弹窗已关；edit/delete 只打开弹窗，不保存/不删除），默认 none' },
                       },
                       additionalProperties: false,
                     },
@@ -2995,12 +3053,17 @@ window.__ModuleLoader__.load({
           const [items, setItems] = useState(null);
           const [query, setQuery] = useState('');
           const [busyRoute, setBusyRoute] = useState(null);
+          const [page, setPage] = useState(0);
 
           useEffect(() => {
             let alive = true;
             loadAdded()
               .then((list) => {
-                if (alive) setItems(list);
+                if (alive) {
+                  setItems(list);
+                  // 编辑/删除后重新加载：回到第 1 页，避免停在越界的旧页码上。
+                  setPage(0);
+                }
               })
               .catch(() => {
                 if (alive) setItems([]);
@@ -3042,6 +3105,8 @@ window.__ModuleLoader__.load({
               if (result?.ok === true) {
                 store.set({ selection: { provider: item.route, model: item.modelId } });
                 showToast(t('toast.selected', { model: item.displayName }));
+                // 切换成功即收工：关掉弹窗，下次打开时高亮会落在刚选的这一行。
+                onClose();
                 return;
               }
               const code = result?.error?.code ?? '';
@@ -3066,6 +3131,11 @@ window.__ModuleLoader__.load({
                 : items.filter((item) =>
                     `${item.displayName} ${item.modelId} ${item.baseURL}`.toLowerCase().includes(needle),
                   );
+          const PAGE_SIZE = 5;
+          const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+          // 删除/搜索后总页数会变，越界时夹到最后一页而不是显示空页。
+          const currentPage = Math.min(page, pageCount - 1);
+          const pageItems = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
 
           const renderRow = (item) => {
             const current = isCurrent(item);
@@ -3158,7 +3228,10 @@ window.__ModuleLoader__.load({
                   { className: 'dsm-manageBody' },
                   h(DsmInput, {
                     value: query,
-                    onChange: setQuery,
+                    onChange: (value) => {
+                      setQuery(value);
+                      setPage(0);
+                    },
                     placeholder: t('manage.search'),
                     ariaLabel: t('manage.search'),
                   }),
@@ -3166,13 +3239,52 @@ window.__ModuleLoader__.load({
                     ? h('div', { className: 'dsm-manageEmpty' }, t('manage.loading'))
                     : filtered.length === 0
                       ? h('div', { className: 'dsm-manageEmpty' }, t('manage.empty'))
-                      : h('div', { className: 'dsm-manageList' }, filtered.map(renderRow)),
+                      : h(
+                          'div',
+                          { className: 'dsm-manageList', 'data-page': String(currentPage + 1) },
+                          pageItems.map(renderRow),
+                        ),
                 ),
               ),
               h(
                 'div',
-                { className: 'dsm-footer' },
-                h(DsmButton, { variant: 'ghost', onClick: onClose }, t('manage.done')),
+                { className: 'dsm-footer dsm-manageFooter' },
+                h(
+                  'div',
+                  { className: 'dsm-pager' },
+                  h(
+                    DsmButton,
+                    {
+                      size: 'sm',
+                      variant: 'ghost',
+                      'data-action': 'prev',
+                      disabled: currentPage <= 0,
+                      onClick: () => setPage(currentPage - 1),
+                    },
+                    t('manage.prev'),
+                  ),
+                  h(
+                    'span',
+                    { className: 'dsm-pagerLabel', 'data-testid': 'select-model-manage-pager' },
+                    t('manage.page', { page: currentPage + 1, total: pageCount }),
+                  ),
+                  h(
+                    DsmButton,
+                    {
+                      size: 'sm',
+                      variant: 'ghost',
+                      'data-action': 'next',
+                      disabled: currentPage >= pageCount - 1,
+                      onClick: () => setPage(currentPage + 1),
+                    },
+                    t('manage.next'),
+                  ),
+                ),
+                h(
+                  DsmButton,
+                  { variant: 'primary', 'data-action': 'confirm', onClick: onClose },
+                  t('manage.confirm'),
+                ),
               ),
             ),
           );
