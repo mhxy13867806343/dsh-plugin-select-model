@@ -17,17 +17,22 @@
  */
 
 export const name = 'select-model';
-export const inject = ['connection'];
+export const inject = ['connection', 'settings', 'credentials'];
 
 const ROUTE_MODELS = '/api/select-model/models';
 const ROUTE_HEALTH = '/api/select-model/health';
+const ROUTE_ADD = '/api/select-model/add';
+const ROUTE_STATE = '/api/select-model/state';
+const ROUTE_REMOVE = '/api/select-model/remove';
+const PROVIDER_NS = 'llm-pi-ai';
+const PROTOCOLS = new Set(['openai-completions', 'openai-responses', 'anthropic-messages']);
 const MAX_BODY = 64 * 1024;
 const TIMEOUT_MS = 10_000;
 const MAX_MODELS = 500;
 const PLUGIN_NAME = 'dsh-plugin-select-model';
 
 // 供本机脚本做无 UI 的逻辑自测（导入本模块不会启动路由）。
-export { fetchModels, normalizeModels, normalizeBaseUrl };
+export { fetchModels, normalizeModels, normalizeBaseUrl, handleAdd, handleState, handleRemove };
 
 /**
  * 安装两条路由；清理函数由 effect 生命周期托管。
@@ -54,6 +59,171 @@ export function apply(ctx) {
       }),
     'select-model: models route',
   );
+  ctx.effect(
+    () =>
+      ctx.connection.fetch.register({
+        path: ROUTE_ADD,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => handleAdd(ctx, request),
+      }),
+    'select-model: add route',
+  );
+  ctx.effect(
+    () =>
+      ctx.connection.fetch.register({
+        path: ROUTE_STATE,
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async () => handleState(ctx),
+      }),
+    'select-model: state route',
+  );
+  ctx.effect(
+    () =>
+      ctx.connection.fetch.register({
+        path: ROUTE_REMOVE,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => handleRemove(ctx, request),
+      }),
+    'select-model: remove route',
+  );
+}
+
+/** 读取并解析 JSON body；失败返回 undefined。 */
+async function readJson(request) {
+  const text = await request.text().catch(() => '');
+  if (text.length > MAX_BODY) return undefined;
+  try {
+    const value = JSON.parse(text);
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 生成一个合法且不会撞车的 provider route id。 */
+function newRouteId(providerId) {
+  const stem = String(providerId || 'custom')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+  const safe = /^[a-z]/.test(stem) ? stem : `p-${stem}`;
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `sel-${safe}-${suffix}`;
+}
+
+/** 由 route 推导凭据引用（与 settings-models 的 deriveKeyRef 同规则）。 */
+function keyRefOf(route) {
+  return route.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+}
+
+/**
+ * 新增一个模型服务：写入 llm-pi-ai 的 providers.<route>，并把 Key 存进 DSH 凭据库。
+ * 成功后模型会在下一次打开模型菜单时出现在该服务商分组里。
+ */
+async function handleAdd(ctx, request) {
+  const payload = await readJson(request);
+  if (payload === undefined) return json(400, { ok: false, error: 'invalid-body' });
+
+  const baseUrl = normalizeBaseUrl(payload.baseUrl);
+  if (baseUrl === null) return json(400, { ok: false, error: 'invalid-base-url' });
+  const apiKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
+  if (apiKey === '') return json(400, { ok: false, error: 'missing-api-key' });
+  const modelId = typeof payload.modelId === 'string' ? payload.modelId.trim().slice(0, 200) : '';
+  if (modelId === '') return json(400, { ok: false, error: 'missing-model' });
+  const modelLabel = typeof payload.modelLabel === 'string' ? payload.modelLabel.trim().slice(0, 200) : '';
+  const displayName = typeof payload.displayName === 'string' ? payload.displayName.trim().slice(0, 100) : '';
+  const protocol = PROTOCOLS.has(payload.protocol) ? payload.protocol : 'openai-completions';
+
+  const route = newRouteId(payload.providerId);
+  const keyRef = keyRefOf(route);
+  const profile = {
+    displayName: displayName === '' ? route : displayName,
+    api: protocol,
+    baseURL: baseUrl,
+    apiKeyEnv: keyRef,
+    models: [{ id: modelId, ...(modelLabel === '' ? {} : { name: modelLabel }) }],
+  };
+
+  try {
+    await ctx.settings.mutate(PROVIDER_NS, [
+      { op: 'set', path: ['providers', route], value: profile },
+    ]);
+  } catch (error) {
+    return json(200, {
+      ok: false,
+      error: typeof error?.code === 'string' ? error.code : 'settings-failed',
+      detail: String(error?.message ?? error).slice(0, 300),
+    });
+  }
+
+  let keyStored = true;
+  try {
+    await ctx.credentials.set(keyRef, apiKey);
+  } catch (error) {
+    keyStored = false;
+  }
+
+  return json(200, {
+    ok: true,
+    route,
+    keyRef,
+    keyStored,
+    provider: { displayName: profile.displayName, protocol, baseURL: baseUrl, modelId },
+  });
+}
+
+/** 只读：列出本插件写入的 provider（不回显 Key）。 */
+async function handleState(ctx) {
+  try {
+    const descriptors = await Promise.resolve(ctx.settings.describe({ redactSecrets: true }));
+    const entry = Array.isArray(descriptors)
+      ? descriptors.find((item) => item?.ns === PROVIDER_NS || String(item?.ns ?? '').endsWith(PROVIDER_NS))
+      : undefined;
+    const providers = entry?.value?.providers;
+    const rows = [];
+    if (providers !== null && typeof providers === 'object') {
+      for (const [route, profile] of Object.entries(providers)) {
+        if (profile === null || typeof profile !== 'object') continue;
+        rows.push({
+          route,
+          displayName: typeof profile.displayName === 'string' ? profile.displayName : route,
+          api: typeof profile.api === 'string' ? profile.api : undefined,
+          baseURL: typeof profile.baseURL === 'string' ? profile.baseURL : undefined,
+          apiKeyEnv: typeof profile.apiKeyEnv === 'string' ? profile.apiKeyEnv : undefined,
+          models: Array.isArray(profile.models)
+            ? profile.models.map((model) => (typeof model?.id === 'string' ? model.id : '')).filter(Boolean)
+            : [],
+          selectModel: route.startsWith('sel-'),
+        });
+      }
+    }
+    return json(200, { ok: true, ns: PROVIDER_NS, providers: rows, selectModelCount: rows.filter((row) => row.selectModel).length });
+  } catch (error) {
+    return json(200, { ok: false, error: 'settings-read-failed', detail: String(error?.message ?? error).slice(0, 300) });
+  }
+}
+
+/** 删除本插件写入的 provider 与凭据（仅允许 sel- 前缀，避免误删用户自己的服务商）。 */
+async function handleRemove(ctx, request) {
+  const payload = await readJson(request);
+  if (payload === undefined) return json(400, { ok: false, error: 'invalid-body' });
+  const route = typeof payload.route === 'string' ? payload.route.trim() : '';
+  if (!/^sel-[a-z0-9-]+$/.test(route)) return json(400, { ok: false, error: 'invalid-route' });
+  try {
+    await ctx.settings.mutate(PROVIDER_NS, [{ op: 'unset', path: ['providers', route] }]);
+  } catch (error) {
+    return json(200, { ok: false, error: 'settings-failed', detail: String(error?.message ?? error).slice(0, 300) });
+  }
+  try {
+    await ctx.credentials.unset(keyRefOf(route));
+  } catch {
+    /* 凭据不存在也不影响移除成功 */
+  }
+  return json(200, { ok: true, route });
 }
 
 /** 代查模型列表。永远返回可解析的 JSON，失败用 ok:false + 稳定错误码。 */

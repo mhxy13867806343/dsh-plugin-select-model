@@ -4,7 +4,7 @@
 
 给 DSH（DeepSeek Harness）Web GUI 的模型菜单加一个出口：**在菜单底部多一行「添加模型」**，点开后弹出服务商选择与 API Key 填写框，方便接入官方列表之外的第三方模型。
 
-> **当前状态：v0.2.0 是「选择 + 拉取」版本。** 菜单入口、弹窗和**按平台获取模型列表**已经可用：切换服务商会得到该平台自己的模型清单（实时从平台 `/models` 拉取，失败时退回内置常用型号），支持下拉选择、搜索和手动输入；点「添加模型」仍只保存草稿（不含 API Key），**还没有把结果写进 DSH 的模型配置**，这一步属于后续计划。
+> **当前状态：v0.3.0 已经能真正添加模型。** 菜单入口、弹窗、按平台获取模型清单都可用：未填 API Key 时显示 OpenRouter 公共目录里的现役型号，填了 Key 就从平台自己的 `/models` 实时拉取；点「添加模型」会写入 DSH 的模型服务配置（`llm-pi-ai` 的 `providers.<route>`）并把 Key 存进 DSH 凭据库，之后在模型菜单里就能选中它。
 
 ## 功能
 
@@ -15,7 +15,11 @@
   - 底部按钮：取消 / 添加模型。
 - **模型列表按平台实时获取**：切换服务商会清空上一个平台的模型选择，并按该平台协议请求 `/models`：
   OpenAI 兼容（Bearer）、Anthropic（`x-api-key` + `anthropic-version`）、Google Gemini（`?key=`，并过滤掉不支持 `generateContent` 的模型）、OpenRouter（公开列表）。平台没返回、没填 Key 或网络失败时，退回该服务商内置的常用型号，仍可手动输入。
-- **两条拉取通道**：优先**浏览器直连**（实测 OpenAI / DeepSeek / Moonshot / SiliconFlow / OpenRouter / Gemini 的 `/models` 都放行 CORS，含 `Authorization` 预检）；直连失败（CORS 拦截、Anthropic 的来源校验、自建网关）再自动走 Host 代理。OpenRouter 公开列表不填 Key 也能出 452 个模型。
+- **三条数据通道（按可信度降级）**：
+  1. 填了平台 Key → **平台自己的 `/models`**（浏览器直连优先；CORS 受限时走 Host 代理），状态显示「平台实时 · N 个模型」；
+  2. 没填 Key → **OpenRouter 公共目录**按厂商前缀过滤（OpenAI / Anthropic / Google / DeepSeek / Qwen / GLM / Kimi 各自的现役型号），状态显示「公共目录 · N 个模型」——它不是平台私有清单，但比内置静态列表实时；
+  3. 都拿不到 → 内置常用型号；任何情况下都可以手动输入模型 ID。
+- **添加会真正落库**：点「添加模型」→ 写入 `llm-pi-ai` 的 `providers.<route>`（`api` / `baseURL` / 模型列表）+ 把 Key 存进 DSH 凭据库（`credentials.set`），然后重新打开模型菜单就能看到该服务商分组。Gemini 会自动改用官方的 OpenAI 兼容端点；Anthropic 走 `anthropic-messages` 协议。
 - **自定义服务商**只提供手动输入，不请求平台（便于接私有/自建网关）。
 - **自动跟随原生菜单**：用 `MutationObserver` 监听菜单的挂载，只在模型根菜单打开时注入那一行；菜单卸载时这一行随菜单 DOM 一起消失，插件卸载时再兜底清理一次，不残留 DOM。
 - **文案中英双语**：通过 `ctx.locale.register` 注册，跟随 DSH 当前语言切换（`locale/zh.json` / `locale/en.json` 同时提供插件管理器里显示的标题与描述）。
@@ -31,9 +35,11 @@
 | 切换服务商 → 该平台自己的模型清单（下拉 / 搜索 / 手输） | ✅ 已完成 |
 | 按平台协议实时拉取模型列表（Host 代理，Key 不落盘） | ✅ 已完成 |
 | 中英文案、深浅色可读性 | ✅ 已完成 |
-| 保存草稿（服务商 / 地址，不含 API Key） | ✅ 已完成（仅 `localStorage`） |
-| 把填写内容写进 DSH 模型配置 | ⛔ 未实现（下一步） |
-| API Key 安全存储、连通性测试 | ⛔ 未实现 |
+| 保存非敏感草稿（服务商 / 地址 / 模型名） | ✅ 已完成（`localStorage`） |
+| 把填写内容写进 DSH 模型服务配置（`llm-pi-ai`） | ✅ 已完成 |
+| API Key 存储 | ✅ 已存入 DSH 凭据库（不再只存内存） |
+| 新增服务商在模型菜单中出现 | ✅ 已完成（重开模型菜单刷新目录） |
+| 连通性测试 / 在界面里编辑或删除已添加项 | ⛔ 未实现（可在 设置 → 模型 里管理，或后续补 UI） |
 | Host 侧路由 / 服务 | ✅ 已完成（`/api/select-model/*`） |
 
 ## 安装
@@ -97,10 +103,13 @@ dsh-plugin-select-model/
 - **清单字段**：`exports` 必须含 `"." → ./index.js`、`"./client" → ./client.js`、`"./locale/*.json"`、`"./icon" → ./icon.svg`、`"./package.json"`；`dsh.bundle.patch` 指向 `./cordis.patch.yml`；`dsh.client` 声明 `platform: "web"`、`immediately: true`，并 `inject` 会话 UI 包，保证菜单那套容器已经就位。
 - **展示元数据**：DSH 只从 `<包名>/locale/<语言>.json` 读 `meta.title` / `meta.description`（英文文件是回退入口，文件名必须是语言 id）；图标来自 `exports."./icon"`，SVG / PNG / JPEG / WebP 均可，单文件上限 256 KiB。图标读失败不会影响标题描述，只会退回文字。
 - **拉取策略**：`ModelPicker` 先 `fetchModelsDirect()`（浏览器 `fetch` + `AbortSignal.timeout(8s)`），成功就直接渲染；失败才 `POST /api/select-model/models` 交给 Host 代理。两条通道共用同一套归一化规则（`normalizeModelPayload` / `normalizeModels`），客户端和 Host 各留一份实现，避免运行时互相依赖。
-- **Host 代理路由**：`index.js` 通过 `ctx.connection.fetch.register` 注册两条同源路由（自动带浏览器鉴权）：
+- **Host 路由**：`index.js` 通过 `ctx.connection.fetch.register` 注册同源路由（自动带浏览器鉴权）：
   - `GET /api/select-model/health`：路由可达性自检；
-  - `POST /api/select-model/models`：入参 `{ providerId, protocol, baseUrl, apiKey }`，按协议请求平台的 `/models` 并归一化为 `{ models: [{ id, label }], count }`。
-  - 安全边界：只接受 http/https、拒绝带凭据的 URL；10s 超时；API Key 只在这一次请求的内存里使用，不落盘、不写日志、不回显；单次最多返回 500 个模型。没有浏览器 CORS 问题（请求由本机 Host 发出）。
+  - `POST /api/select-model/models`：入参 `{ providerId, protocol, baseUrl, apiKey }`，按协议请求平台的 `/models` 并归一化为 `{ models: [{ id, label }], count }`；
+  - `POST /api/select-model/add`：入参 `{ providerId, protocol, baseUrl, apiKey, modelId, modelLabel?, displayName? }`，写入 `llm-pi-ai` 的 `providers.<sel-…>` 并 `credentials.set`；返回 route / keyRef；
+  - `GET /api/select-model/state`：只读列出本插件写入的服务商（不回显 Key）；
+  - `POST /api/select-model/remove`：只允许删除 `sel-` 前缀的本插件服务商，同时清掉凭据。
+  - 安全边界：只接受 http/https、拒绝带凭据的 URL；10s 超时；模型查询用的 Key 只在内存里转发，不写日志、不回显；添加时才写入 DSH 凭据库；单次最多返回 500 个模型。
 - **模型选择器**：下拉用 portal 渲染到 body（逃出弹窗的滚动容器），底部空间不足时自动向上展开；支持搜索、刷新、手动输入；服务商切换会清空列表与已选模型。
 - **不碰宿主 DOM 结构以外的状态**：菜单行是克隆原生行得到的，原生菜单改版导致结构对不上时，最多是这个增强失效，不影响模型菜单本身的其它功能。
 
@@ -110,7 +119,7 @@ dsh-plugin-select-model/
 2. **API Key 处理**：Key 不明文落盘，只保存引用；输入后提供「校验 / 连通性测试」按钮。
 3. **完善交互**：必填校验、错误提示、保存中的 loading 态、编辑已添加的第三方模型、删除入口。
 4. **可配置**：服务商清单做成配置项，允许用户自定义常用服务商。
-5. **写入配置**：把选定的服务商 / 模型 / Key 引用写进 DSH 的 provider 配置，让自定义模型真正出现在原生模型菜单里（当前只做选择与拉取，不落库）。
+5. **管理已添加项**：在弹窗里列出本插件写入的服务商，支持编辑 / 删除 / 连通性测试（现在先用 `/api/select-model/state` 与 `/api/select-model/remove`，UI 下个版本补）。
 
 ## 许可证
 

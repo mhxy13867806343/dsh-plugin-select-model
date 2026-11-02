@@ -33,6 +33,8 @@ window.__ModuleLoader__.load({
     }
     /** 模型列表接口（Host 半边提供，见 index.js）。 */
     const MODELS_ROUTE = '/api/select-model/models';
+    /** 新增模型服务接口：写入 llm-pi-ai 配置 + 凭据库。 */
+    const ADD_ROUTE = '/api/select-model/add';
 
     // ─────────────────────────────────────────────────────── 常量
 
@@ -59,7 +61,7 @@ window.__ModuleLoader__.load({
       'menu.addHint': '第三方 / 自定义',
 
       'dialog.title': '添加模型',
-      'dialog.desc': '连接第三方模型服务：选择服务商并填写 API Key，即可在模型菜单中使用。',
+      'dialog.desc': '选择服务商、填写 Key 与模型，添加后即可在模型菜单里使用。',
 
       'provider.section': '选择服务商',
       'provider.openai': 'GPT 系列',
@@ -83,9 +85,12 @@ window.__ModuleLoader__.load({
       'field.modelCustomPlaceholder': '输入模型 ID，例如 my-model',
       'tag.optional': '可选',
 
-      'model.loading': '正在从平台获取模型列表…',
-      'model.live': '来自平台 · 共 {n} 个模型',
-      'model.fallback': '常用模型 · 填写 API Key 后自动获取平台列表',
+      'model.loading': '正在获取…',
+      'catalog.loading': '正在读取公共目录…',
+      'catalog.live': '公共目录 · {n} 个模型',
+      'model.needKey': '请先填写 API Key 再从平台获取',
+      'model.live': '平台实时 · {n} 个模型',
+      'model.fallback': '内置常用 · 填 Key 后自动获取',
       'model.failed': '自动获取失败（{reason}），以下是常用模型，也可手动输入',
       'model.search': '搜索模型…',
       'model.empty': '没有匹配的模型',
@@ -111,9 +116,17 @@ window.__ModuleLoader__.load({
       'action.hide': '隐藏',
       'action.close': '关闭',
 
-      'hint.localOnly': 'API Key 只在本次请求中经本机转发，不落盘、不上传到第三方以外的地方。',
-      'note.preview': '模型列表会从所选平台实时获取；获取失败时展示常用模型，也可以手动输入。',
-      'toast.saved': '已保存配置草稿（模型接入尚未实现）',
+      'hint.localOnly': 'API Key 会存入本机 DSH 凭据库，只用于调用该服务商。',
+      'note.preview': '未填 Key 时显示 OpenRouter 公共目录；填 Key 后以平台实时列表为准。',
+      'toast.added': '已添加「{model}」，打开模型菜单即可使用',
+      'add.loading': '添加中…',
+      'add.err.network': '无法连接本机 Host，请确认 DSH 正在运行。',
+      'add.err.restart': 'Host 半边还没加载：请重启一次 DSH 后再添加。',
+      'add.err.missing-api-key': '请填写 API Key。',
+      'add.err.missing-model': '请选择或输入模型 ID。',
+      'add.err.invalid-base-url': '接口地址格式不对。',
+      'add.err.settings-failed': '写入模型服务配置失败：{detail}',
+      'add.err.generic': '添加失败：{detail}',
     };
 
     /** English，键集与中文一致。 */
@@ -122,7 +135,7 @@ window.__ModuleLoader__.load({
       'menu.addHint': 'Third-party / Custom',
 
       'dialog.title': 'Add a model',
-      'dialog.desc': 'Connect a third-party model service: pick a provider and enter its API key to use it from the model menu.',
+      'dialog.desc': 'Pick a provider, enter its key and a model; it appears in the model menu once added.',
 
       'provider.section': 'Provider',
       'provider.openai': 'GPT models',
@@ -146,9 +159,12 @@ window.__ModuleLoader__.load({
       'field.modelCustomPlaceholder': 'Type a model ID, e.g. my-model',
       'tag.optional': 'Optional',
 
-      'model.loading': 'Fetching the model list from the provider…',
-      'model.live': 'Live from provider · {n} models',
-      'model.fallback': 'Common models · enter an API key to fetch the live list',
+      'model.loading': 'Fetching…',
+      'catalog.loading': 'Reading public directory…',
+      'catalog.live': 'Public directory · {n} models',
+      'model.needKey': 'Enter the API key to fetch the live list',
+      'model.live': 'Live · {n} models',
+      'model.fallback': 'Built-in list · add a key for live models',
       'model.failed': 'Automatic fetch failed ({reason}); showing common models — you can still type one.',
       'model.search': 'Search models…',
       'model.empty': 'No matching models',
@@ -174,9 +190,17 @@ window.__ModuleLoader__.load({
       'action.hide': 'Hide',
       'action.close': 'Close',
 
-      'hint.localOnly': 'The API key is only relayed through this machine for this request; it is not persisted.',
-      'note.preview': 'The model list is fetched live from the selected provider; when that fails, common models are shown and you can type your own.',
-      'toast.saved': 'Draft saved (model wiring is not implemented yet)',
+      'hint.localOnly': 'The API key is stored in the local DSH credential store, used only for this provider.',
+      'note.preview': 'Without a key this shows the OpenRouter public directory; with a key the provider\'s live list wins.',
+      'toast.added': 'Added “{model}” — open the model menu to use it',
+      'add.loading': 'Adding…',
+      'add.err.network': 'Cannot reach the local host; check that DSH is running.',
+      'add.err.restart': 'The host half is not loaded yet; restart DSH once, then add again.',
+      'add.err.missing-api-key': 'Enter an API key.',
+      'add.err.missing-model': 'Pick or type a model ID.',
+      'add.err.invalid-base-url': 'The base URL is malformed.',
+      'add.err.settings-failed': 'Could not write the model-service config: {detail}',
+      'add.err.generic': 'Add failed: {detail}',
     };
 
     // ─────────────────────────────────────────────────────── 服务商预设
@@ -369,6 +393,7 @@ window.__ModuleLoader__.load({
 .dsm-body{display:flex;flex-direction:column;gap:14px;margin-top:20px;padding:0 24px;min-height:0;overflow-y:auto;max-height:min(64vh,540px)}
 .dsm-note{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-module-platform,rgba(127,127,127,.10));color:var(--dsw-alias-label-secondary,#a3a3a3);font-size:12px;line-height:18px}
 .dsm-noteMark{flex:none;font-size:12px;line-height:18px;color:var(--dsw-alias-brand-primary,#4d6bfe)}
+.dsm-submitError{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-interactive-bg-hover-danger,rgba(248,81,73,.12));color:var(--dsw-alias-state-error-primary,#f85149);font-size:12px;line-height:18px}
 .dsm-section{display:flex;flex-direction:column;min-width:0}
 .dsm-sectionTitle{margin:0 0 8px;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-secondary,#a3a3a3)}
 .dsm-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -411,6 +436,7 @@ window.__ModuleLoader__.load({
 .dsm-modelStatus{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8a8a);min-height:16px}
 .dsm-modelStatus[data-tone="error"]{color:var(--dsw-alias-state-error-primary,#f85149)}
 .dsm-modelStatus[data-tone="live"]{color:var(--dsw-alias-state-success-primary,#3fb950)}
+.dsm-modelStatus[data-tone="info"]{color:var(--dsw-alias-brand-primary,#4d6bfe)}
 .dsm-modelMenu{position:fixed;z-index:1400;display:flex;flex-direction:column;max-height:320px;padding:6px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-overlay,#2a2a2a);box-shadow:var(--dsw-elevation-prominent,0 12px 32px rgba(0,0,0,.4));color:var(--dsw-alias-label-primary,#e6e6e6);animation:dsmPop .12s ease-out}
 .dsm-modelHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 6px 6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#a3a3a3)}
 .dsm-modelHeadText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -815,6 +841,87 @@ window.__ModuleLoader__.load({
       return { models, count: models.length };
     }
 
+    // ── 公共模型目录：没有平台 Key 时也能看到「当前真实存在」的型号 ──
+    // OpenRouter 的 /models 是公开目录（无需 Key、允许 CORS），按厂商前缀过滤后
+    // 就能拿到 OpenAI / Anthropic / Google / DeepSeek / Qwen / GLM / Kimi 的现役型号。
+    // 它只是「目录参考」：填了平台 Key 后仍以平台自己的 /models 为准。
+    const PUBLIC_CATALOG_URL = 'https://openrouter.ai/api/v1/models';
+    const CATALOG_TTL_MS = 10 * 60 * 1000;
+    const CATALOG_VENDORS = Object.freeze({
+      openai: 'openai',
+      anthropic: 'anthropic',
+      google: 'google',
+      deepseek: 'deepseek',
+      dashscope: 'qwen',
+      zhipu: 'z-ai',
+      moonshot: 'moonshotai',
+    });
+    /** 模块级缓存：一次会话里只拉一次公共目录，10 分钟过期。 */
+    let catalogCache = null;
+    let catalogAt = 0;
+    let catalogPending = null;
+
+    /** 拉取公共目录（带缓存与并发合并）。 */
+    function loadPublicCatalog(force = false) {
+      const now = Date.now();
+      if (!force && catalogCache !== null && now - catalogAt < CATALOG_TTL_MS) {
+        return Promise.resolve(catalogCache);
+      }
+      if (!force && catalogPending !== null) return catalogPending;
+      catalogPending = (async () => {
+        const response = await fetch(PUBLIC_CATALOG_URL, {
+          headers: { accept: 'application/json' },
+          mode: 'cors',
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw modelError(`http_${response.status}`, '');
+        const parsed = await response.json();
+        const list = Array.isArray(parsed?.data) ? parsed.data : [];
+        const entries = [];
+        for (const item of list) {
+          if (item === null || typeof item !== 'object' || typeof item.id !== 'string') continue;
+          if (item.id.includes(':')) continue; // 过滤 :batch / :free 这类 OpenRouter 路由变体
+          entries.push({
+            id: item.id,
+            name: typeof item.name === 'string' && item.name !== '' ? item.name : item.id,
+          });
+        }
+        if (entries.length === 0) throw modelError('empty-list', '');
+        catalogCache = entries;
+        catalogAt = Date.now();
+        return entries;
+      })().finally(() => {
+        catalogPending = null;
+      });
+      return catalogPending;
+    }
+
+    /** 把公共目录条目映射成当前服务商可选的型号（去掉厂商前缀，还原平台 id 风格）。 */
+    function catalogModelsFor(provider, catalog) {
+      const labelOf = (name) => (name.includes(': ') ? name.slice(name.indexOf(': ') + 2) : name);
+      if (provider.id === 'openrouter') {
+        return catalog.map((entry) => ({ id: entry.id, label: labelOf(entry.name) }));
+      }
+      const vendor = CATALOG_VENDORS[provider.id];
+      if (vendor === undefined) return null;
+      const prefix = `${vendor}/`;
+      const models = [];
+      for (const entry of catalog) {
+        if (!entry.id.startsWith(prefix)) continue;
+        const raw = entry.id.slice(prefix.length);
+        const id = provider.protocol === 'anthropic' ? raw.replace(/\./g, '-') : raw;
+        models.push({ id, label: labelOf(entry.name) });
+      }
+      return models.length > 0 ? models : null;
+    }
+
+    /** 新增模型的错误码 → 文案。 */
+    function describeAddError(t, code, detail) {
+      const key = `add.err.${code}`;
+      const text = t(key, { detail: detail ?? '' });
+      return text === key ? t('add.err.generic', { detail: detail || code }) : text;
+    }
+
     /** 把 Host 返回的错误码翻译成用户可读的一句话；未知错误码给出兜底文案。 */
     function describeModelError(t, code) {
       const key = `model.err.${code}`;
@@ -841,6 +948,9 @@ window.__ModuleLoader__.load({
       const [loading, setLoading] = useState(false);
       const [errorCode, setErrorCode] = useState(null);
       const [query, setQuery] = useState('');
+      const [catalogModels, setCatalogModels] = useState(null);
+      const [catalogLoading, setCatalogLoading] = useState(false);
+      const [hintCode, setHintCode] = useState(null);
       const [menuRect, setMenuRect] = useState(null);
       const anchorRef = useRef(null);
       const menuRef = useRef(null);
@@ -848,7 +958,7 @@ window.__ModuleLoader__.load({
       const requestSeq = useRef(0);
       const listId = 'dsm-model-list';
 
-      const source = models ?? provider.fallbackModels;
+      const source = models ?? catalogModels ?? provider.fallbackModels;
       const filtered = useMemo(() => {
         const needle = query.trim().toLowerCase();
         if (needle === '') return source;
@@ -933,6 +1043,42 @@ window.__ModuleLoader__.load({
       }, [provider.id, provider.baseUrl, provider.protocol, baseUrl, apiKey]);
 
       const canFetch = provider.publicModels === true || apiKey.trim() !== '';
+
+      // 公共目录：没有平台 Key 时也先给出「现役型号」参考（OpenRouter 公开目录，按厂商过滤）。
+      useEffect(() => {
+        let cancelled = false;
+        const supportsCatalog = provider.id === 'openrouter' || CATALOG_VENDORS[provider.id] !== undefined;
+        if (!supportsCatalog) {
+          setCatalogModels(null);
+          setCatalogLoading(false);
+          return undefined;
+        }
+        setCatalogLoading(true);
+        loadPublicCatalog()
+          .then((catalog) => {
+            if (cancelled) return;
+            setCatalogModels(catalogModelsFor(provider, catalog));
+          })
+          .catch(() => {
+            if (!cancelled) setCatalogModels(null);
+          })
+          .finally(() => {
+            if (!cancelled) setCatalogLoading(false);
+          });
+        return () => {
+          cancelled = true;
+        };
+      }, [provider.id, provider.protocol]);
+
+      // 「请先填 Key」提示 4 秒后淡出；Key 就绪后立刻清掉。
+      useEffect(() => {
+        if (hintCode === null) return undefined;
+        const timer = window.setTimeout(() => setHintCode(null), 4500);
+        return () => window.clearTimeout(timer);
+      }, [hintCode]);
+      useEffect(() => {
+        if (canFetch) setHintCode(null);
+      }, [canFetch]);
 
       // 服务商切换：清空模型列表、搜索词与下拉状态（避免把上一个平台的模型带过来）。
       useEffect(() => {
@@ -1066,16 +1212,32 @@ window.__ModuleLoader__.load({
       };
 
       const hardError = errorCode !== null && errorCode !== 'route-missing';
-      const statusText = isCustom
-        ? t('model.customHint')
-        : loading
-          ? t('model.loading')
-          : hardError
-            ? t('model.failed', { reason: describeModelError(t, errorCode) })
-            : models !== null
-              ? t('model.live', { n: models.length })
-              : t('model.fallback');
-      const statusTone = !loading && hardError ? 'error' : models !== null && !loading ? 'live' : undefined;
+      const sourceState = isCustom
+        ? { text: t('model.customHint'), tone: undefined }
+        : hardError
+          ? { text: t('model.failed', { reason: describeModelError(t, errorCode) }), tone: 'error' }
+          : hintCode === 'need-key'
+            ? { text: t('model.needKey'), tone: 'error' }
+            : loading
+              ? { text: t('model.loading'), tone: undefined }
+              : models !== null
+                ? { text: t('model.live', { n: models.length }), tone: 'live' }
+                : catalogLoading
+                  ? { text: t('catalog.loading'), tone: undefined }
+                  : catalogModels !== null
+                    ? { text: t('catalog.live', { n: catalogModels.length }), tone: 'info' }
+                    : { text: t('model.fallback'), tone: undefined };
+      const statusText = sourceState.text;
+      const statusTone = sourceState.tone;
+
+      /** 下拉里的「刷新 / 获取平台列表」。没有 Key 时给出明确提示，而不是静默回退。 */
+      const refreshModels = () => {
+        if (!canFetch) {
+          setHintCode('need-key');
+          return;
+        }
+        void fetchModels();
+      };
 
       const menu =
         open && menuRect !== null && typeof document !== 'undefined'
@@ -1096,23 +1258,13 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'dsm-modelHead' },
-                  h(
-                    'span',
-                    { className: 'dsm-modelHeadText' },
-                    loading
-                      ? t('model.loading')
-                      : models !== null
-                        ? t('model.live', { n: models.length })
-                        : t('model.fallback'),
-                  ),
+                  h('span', { className: 'dsm-modelHeadText' }, sourceState.text),
                   h(
                     'button',
                     {
                       type: 'button',
                       className: 'dsm-modelRefresh',
-                      onClick: () => {
-                        void fetchModels();
-                      },
+                      onClick: refreshModels,
                     },
                     loading ? '…' : t('model.refresh'),
                   ),
@@ -1223,6 +1375,20 @@ window.__ModuleLoader__.load({
     // ─────────────────────────────────────────────────────── 添加模型弹窗
 
     /**
+     * 把界面上的服务商映射成 DSH 模型服务（llm-pi-ai）的协议与兼容地址。
+     * pi-ai 只有 openai-completions / openai-responses / anthropic-messages 三种协议；
+     * Gemini 的原生 v1beta 接口不在其中，所以改用它官方的 OpenAI 兼容端点。
+     */
+    function piAiProfileOf(provider, baseUrl) {
+      const trimmed = baseUrl.trim() || provider.baseUrl;
+      if (provider.id === 'google') {
+        return { protocol: 'openai-completions', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' };
+      }
+      if (provider.protocol === 'anthropic') return { protocol: 'anthropic-messages', baseUrl: trimmed };
+      return { protocol: 'openai-completions', baseUrl: trimmed };
+    }
+
+    /**
      * 添加模型弹窗（布局版本）：服务商网格 + 接入字段 + 取消/添加。
      * @param {object} props
      * @param {boolean} props.open 是否打开
@@ -1236,6 +1402,8 @@ window.__ModuleLoader__.load({
       const [baseUrl, setBaseUrl] = useState(PROVIDERS[0].baseUrl);
       const [modelName, setModelName] = useState('');
       const [reveal, setReveal] = useState(false);
+      const [submitting, setSubmitting] = useState(false);
+      const [submitError, setSubmitError] = useState(null);
       const keyRef = useRef(null);
       const wasOpen = useRef(false);
 
@@ -1249,6 +1417,8 @@ window.__ModuleLoader__.load({
           setBaseUrl(typeof draft.baseUrl === 'string' ? draft.baseUrl : preset.baseUrl);
           setModelName(typeof draft.modelName === 'string' ? draft.modelName : '');
           setReveal(false);
+          setSubmitting(false);
+          setSubmitError(null);
         }
         wasOpen.current = open;
       }, [open]);
@@ -1283,7 +1453,10 @@ window.__ModuleLoader__.load({
         () => PROVIDERS.find((item) => item.id === providerId) ?? PROVIDERS[0],
         [providerId],
       );
-      const canAdd = apiKey.trim() !== '' && (provider.id !== 'custom' || baseUrl.trim() !== '');
+      const canAdd =
+        apiKey.trim() !== '' &&
+        modelName.trim() !== '' &&
+        (provider.id !== 'custom' || baseUrl.trim() !== '');
 
       if (!open) return null;
 
@@ -1291,18 +1464,48 @@ window.__ModuleLoader__.load({
         setProviderId(next.id);
         // 服务商换了，模型 ID 一定不能沿用上一个平台的。
         setModelName('');
+        setSubmitError(null);
         if (next.id !== 'custom') setBaseUrl(next.baseUrl);
       };
 
-      const submit = () => {
-        if (!canAdd) return;
-        onSubmit({
-          providerId,
-          providerName: provider.name,
-          apiKey: apiKey.trim(),
-          baseUrl: baseUrl.trim(),
-          modelName: modelName.trim(),
-        });
+      /** 提交：写入 llm-pi-ai 的 provider 配置 + DSH 凭据库，成功后由父组件收尾。 */
+      const submit = async () => {
+        if (!canAdd || submitting) return;
+        const target = piAiProfileOf(provider, baseUrl);
+        const modelId = modelName.trim();
+        const displayName = modelId === '' ? provider.name : `${provider.name} · ${modelId}`;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+          const response = await fetch(ADD_ROUTE, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              providerId: provider.id,
+              protocol: target.protocol,
+              baseUrl: target.baseUrl,
+              apiKey: apiKey.trim(),
+              modelId,
+              modelLabel: modelId,
+              displayName,
+            }),
+          });
+          if (response.status === 404) {
+            setSubmitError(t('add.err.restart'));
+            return;
+          }
+          const data = await response.json().catch(() => null);
+          if (data === null || data.ok !== true) {
+            const code = data !== null && typeof data.error === 'string' ? data.error : 'generic';
+            setSubmitError(describeAddError(t, code, data?.detail ?? ''));
+            return;
+          }
+          onSubmit({ providerId, providerName: provider.name, modelName: modelId, route: data.route });
+        } catch {
+          setSubmitError(t('add.err.network'));
+        } finally {
+          setSubmitting(false);
+        }
       };
 
       /** Enter 提交（焦点在输入框时）；按钮自身的 Enter 走原生 click，避免重复提交。 */
@@ -1310,7 +1513,7 @@ window.__ModuleLoader__.load({
         if (event.key !== 'Enter' || event.shiftKey) return;
         const target = event.target;
         if (target instanceof HTMLElement && target.closest('button') !== null) return;
-        if (!canAdd) return;
+        if (!canAdd || submitting) return;
         event.preventDefault();
         submit();
       };
@@ -1325,6 +1528,14 @@ window.__ModuleLoader__.load({
           h('span', { className: 'dsm-noteMark', 'aria-hidden': 'true' }, 'i'),
           h('span', null, t('note.preview')),
         ),
+        submitError !== null
+          ? h(
+              'div',
+              { className: 'dsm-submitError', role: 'alert' },
+              h('span', { 'aria-hidden': 'true' }, '!'),
+              h('span', null, submitError),
+            )
+          : null,
         // 服务商网格
         h(
           'div',
@@ -1478,8 +1689,8 @@ window.__ModuleLoader__.load({
             h(DsmButton, { variant: 'ghost', onClick: onClose }, t('action.cancel')),
             h(
               DsmButton,
-              { variant: 'primary', disabled: !canAdd, onClick: submit },
-              t('action.add'),
+              { variant: 'primary', disabled: !canAdd || submitting, onClick: submit },
+              submitting ? t('add.loading') : t('action.add'),
             ),
           ),
         ),
@@ -1638,21 +1849,30 @@ window.__ModuleLoader__.load({
         const openPreview = async (input) => {
           const providerId = typeof input?.providerId === 'string' ? input.providerId : null;
           const openModels = input?.openModels === true;
+          const direct = input?.direct === true;
           if (store.get().open === true) {
             store.set({ open: false });
             await waitFor(() => store.get().open === false, 800);
           }
-          const trigger = findTrigger();
-          if (trigger === null) return { ok: false, reason: 'model-trigger-not-found' };
-          trigger.click();
-          const menu = await waitFor(findMenu);
-          if (menu === null) return { ok: false, reason: 'model-menu-not-opened' };
-          const menuRows = Array.from(menu.children)
-            .filter((node) => node instanceof HTMLElement && node.matches('button[role="menuitem"]'))
-            .map((node) => (node.textContent ?? '').trim());
-          const row = await waitFor(() => menu.querySelector(`[${ROW_ATTR}]`));
-          if (row === null) return { ok: false, reason: 'add-model-row-not-injected', menuRows };
-          row.click();
+          let menuRows = [];
+          let rowText = '';
+          if (direct) {
+            // 调试用：绕过内置菜单，直接打开弹窗（验证弹窗/模型选择器本身）。
+            store.set({ open: true });
+          } else {
+            const trigger = findTrigger();
+            if (trigger === null) return { ok: false, reason: 'model-trigger-not-found' };
+            trigger.click();
+            const menu = await waitFor(findMenu);
+            if (menu === null) return { ok: false, reason: 'model-menu-not-opened' };
+            menuRows = Array.from(menu.children)
+              .filter((node) => node instanceof HTMLElement && node.matches('button[role="menuitem"]'))
+              .map((node) => (node.textContent ?? '').trim());
+            const row = await waitFor(() => menu.querySelector(`[${ROW_ATTR}]`));
+            if (row === null) return { ok: false, reason: 'add-model-row-not-injected', menuRows };
+            rowText = (row.textContent ?? '').trim();
+            row.click();
+          }
           const dialog = await waitFor(
             () => document.querySelector('[data-testid="select-model-dialog"]'),
             2500,
@@ -1723,7 +1943,7 @@ window.__ModuleLoader__.load({
           return {
             ok: true,
             menuRows,
-            rowText: (row.textContent ?? '').trim(),
+            rowText,
             switchedProvider,
             picker,
             dialog: {
@@ -1961,6 +2181,7 @@ window.__ModuleLoader__.load({
                       properties: {
                         providerId: { type: 'string', description: '可选：切到某个服务商，如 openrouter / anthropic' },
                         openModels: { type: 'boolean', description: '可选：点开模型下列表并等待平台列表返回' },
+                        direct: { type: 'boolean', description: '可选：绕过内置菜单直接打开弹窗（调试用）' },
                       },
                       additionalProperties: false,
                     },
@@ -2061,6 +2282,13 @@ window.__ModuleLoader__.load({
         function DialogHost() {
           const open = useStoreValue(store, (state) => state.open);
           const toast = useStoreValue(store, (state) => state.toast);
+          // 热更新会换掉插件实例：把上一次实例遗留在 body 里的 portal / 弹窗清掉，
+          // 避免出现「旧下拉盖住新下拉」这种只在开发时可见的残影。
+          useEffect(() => {
+            document
+              .querySelectorAll('.dsm-modelMenu, .dsm-root, .dsm-toast')
+              .forEach((node) => node.remove());
+          }, []);
           return h(
             Fragment,
             null,
@@ -2071,7 +2299,7 @@ window.__ModuleLoader__.load({
               onSubmit: (draft) => {
                 writeDraft(draft);
                 store.set({ open: false });
-                showToast(t('toast.saved'));
+                showToast(t('toast.added', { model: draft.modelName || draft.providerName }));
               },
             }),
             toast !== null
