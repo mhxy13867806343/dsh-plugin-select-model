@@ -884,15 +884,37 @@ window.__ModuleLoader__.load({
           return null;
         };
 
-        const status = () => ({
-          plugin: NS,
-          hasDocument: typeof document !== 'undefined',
-          injectedRows: document.querySelectorAll(`[${ROW_ATTR}]`).length,
-          menuOpen: findMenu() !== null,
-          dialogOpen: store.get().open === true,
-          menuLabels: MODEL_MENU_LABELS,
-          addLabel: t('menu.add'),
-        });
+        const status = () => {
+          const triggers = [];
+          for (const button of document.querySelectorAll('button[aria-haspopup="menu"][aria-label]')) {
+            if (!(button instanceof HTMLElement)) continue;
+            if (!MODEL_TRIGGER_LABEL.test(button.getAttribute('aria-label') ?? '')) continue;
+            const rect = button.getBoundingClientRect();
+            triggers.push({
+              label: button.getAttribute('aria-label'),
+              visible: button.getClientRects().length > 0,
+              expanded: button.getAttribute('aria-expanded'),
+              top: Math.round(rect.top),
+              left: Math.round(rect.left),
+            });
+          }
+          const modelMenus = [...document.querySelectorAll('[role="menu"]')].filter(
+            (node) =>
+              node instanceof HTMLElement && MODEL_MENU_LABELS.includes(node.getAttribute('aria-label') ?? ''),
+          ).length;
+          return {
+            plugin: NS,
+            hasDocument: typeof document !== 'undefined',
+            injectedRows: document.querySelectorAll(`[${ROW_ATTR}]`).length,
+            menuOpen: findMenu() !== null,
+            dialogOpen: store.get().open === true,
+            menuLabels: MODEL_MENU_LABELS,
+            addLabel: t('menu.add'),
+            triggerCount: triggers.length,
+            triggers,
+            modelMenuCount: modelMenus,
+          };
+        };
 
         /** 只打开模型菜单并停在打开状态（供截图检查「添加模型」行）。 */
         const openMenu = async () => {
@@ -951,7 +973,7 @@ window.__ModuleLoader__.load({
           if (dialog === null) {
             return { ok: false, reason: 'dialog-not-opened', menuRows };
           }
-          await sleep(260); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
+          await sleep(420); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
           const rect = dialog.getBoundingClientRect();
           const body = dialog.querySelector('.dsm-body');
           const hint = dialog.querySelector('.dsm-hint');
@@ -1049,7 +1071,7 @@ window.__ModuleLoader__.load({
           }
           report.steps.push('dialog opened');
           report.menuClosedAfterOpen = findMenu() === null;
-          await sleep(260); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
+          await sleep(420); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
           const dialogRect = dialog.getBoundingClientRect();
           const providers = Array.from(dialog.querySelectorAll('.dsm-provider'));
           const inputs = Array.from(dialog.querySelectorAll('input'));
