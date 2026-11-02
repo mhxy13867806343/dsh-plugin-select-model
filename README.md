@@ -15,6 +15,7 @@
   - 底部按钮：取消 / 添加模型。
 - **模型列表按平台实时获取**：切换服务商会清空上一个平台的模型选择，并按该平台协议请求 `/models`：
   OpenAI 兼容（Bearer）、Anthropic（`x-api-key` + `anthropic-version`）、Google Gemini（`?key=`，并过滤掉不支持 `generateContent` 的模型）、OpenRouter（公开列表）。平台没返回、没填 Key 或网络失败时，退回该服务商内置的常用型号，仍可手动输入。
+- **两条拉取通道**：优先**浏览器直连**（实测 OpenAI / DeepSeek / Moonshot / SiliconFlow / OpenRouter / Gemini 的 `/models` 都放行 CORS，含 `Authorization` 预检）；直连失败（CORS 拦截、Anthropic 的来源校验、自建网关）再自动走 Host 代理。OpenRouter 公开列表不填 Key 也能出 452 个模型。
 - **自定义服务商**只提供手动输入，不请求平台（便于接私有/自建网关）。
 - **自动跟随原生菜单**：用 `MutationObserver` 监听菜单的挂载，只在模型根菜单打开时注入那一行；菜单卸载时这一行随菜单 DOM 一起消失，插件卸载时再兜底清理一次，不残留 DOM。
 - **文案中英双语**：通过 `ctx.locale.register` 注册，跟随 DSH 当前语言切换（`locale/zh.json` / `locale/en.json` 同时提供插件管理器里显示的标题与描述）。
@@ -49,7 +50,7 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-sel
 
 装完后通常无需手动刷新：本地目录安装是软链，客户端 bundle 的改动会走 HMR；若菜单里没出现新增行，再刷新一次 Web GUI 页面。**不要**改本仓库里的 `package.json` 或往 `~/.dsh/profiles/<profile>/node_modules/` 里手动拷文件，那会绕过插件管理器的依赖记账，卸载时会留下残渣。
 
-> **注意（只影响开发升级）**：客户端 `client.js` 改动会热更新，但 Host 半边 `index.js` 的改动**必须重启一次 DSH** 才会加载新的 JS 模块（Node 的 ESM 缓存不会因为改文件而失效）。全新安装时不存在这个问题；从旧版本升级、且新增/修改了 `index.js` 的版本，重启一次即可。
+> **注意（只影响开发升级）**：客户端 `client.js` 改动会热更新；使用**浏览器直连**的平台（OpenAI / DeepSeek / Moonshot / SiliconFlow / OpenRouter / Gemini）改完即生效。但 Host 半边 `index.js` 的改动**必须重启一次 DSH** 才会加载新的 JS 模块（Node 的 ESM 缓存不会因为改文件而失效），所以依赖 Host 代理的 **Anthropic / CORS 受限平台**在升级后需要重启一次才会实时拉取。全新安装不存在这个问题。
 
 ### 方式二：本机目录软链 / 复制
 
@@ -95,6 +96,7 @@ dsh-plugin-select-model/
 
 - **清单字段**：`exports` 必须含 `"." → ./index.js`、`"./client" → ./client.js`、`"./locale/*.json"`、`"./icon" → ./icon.svg`、`"./package.json"`；`dsh.bundle.patch` 指向 `./cordis.patch.yml`；`dsh.client` 声明 `platform: "web"`、`immediately: true`，并 `inject` 会话 UI 包，保证菜单那套容器已经就位。
 - **展示元数据**：DSH 只从 `<包名>/locale/<语言>.json` 读 `meta.title` / `meta.description`（英文文件是回退入口，文件名必须是语言 id）；图标来自 `exports."./icon"`，SVG / PNG / JPEG / WebP 均可，单文件上限 256 KiB。图标读失败不会影响标题描述，只会退回文字。
+- **拉取策略**：`ModelPicker` 先 `fetchModelsDirect()`（浏览器 `fetch` + `AbortSignal.timeout(8s)`），成功就直接渲染；失败才 `POST /api/select-model/models` 交给 Host 代理。两条通道共用同一套归一化规则（`normalizeModelPayload` / `normalizeModels`），客户端和 Host 各留一份实现，避免运行时互相依赖。
 - **Host 代理路由**：`index.js` 通过 `ctx.connection.fetch.register` 注册两条同源路由（自动带浏览器鉴权）：
   - `GET /api/select-model/health`：路由可达性自检；
   - `POST /api/select-model/models`：入参 `{ providerId, protocol, baseUrl, apiKey }`，按协议请求平台的 `/models` 并归一化为 `{ models: [{ id, label }], count }`。

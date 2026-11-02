@@ -716,6 +716,105 @@ window.__ModuleLoader__.load({
 
     // ─────────────────────────────────────────────────────── 模型选择器
 
+    /**
+     * 归一化平台 `/models` 响应（与 index.js 的 normalizeModels 保持同构）。
+     * 浏览器直连与 Host 代理共用同一份解析规则。
+     */
+    function normalizeModelPayload(parsed, protocol) {
+      const list = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : Array.isArray(parsed?.models)
+            ? parsed.models
+            : Array.isArray(parsed?.items)
+              ? parsed.items
+              : [];
+      const seen = new Set();
+      const models = [];
+      for (const item of list) {
+        let id = '';
+        let label = '';
+        if (typeof item === 'string') {
+          id = item;
+        } else if (item !== null && typeof item === 'object') {
+          if (protocol === 'google') {
+            if (
+              Array.isArray(item.supportedGenerationMethods) &&
+              !item.supportedGenerationMethods.includes('generateContent')
+            ) {
+              continue;
+            }
+            id = typeof item.name === 'string' ? item.name : '';
+            if (id.startsWith('models/')) id = id.slice('models/'.length);
+            label = typeof item.displayName === 'string' ? item.displayName : '';
+          } else {
+            id = typeof item.id === 'string' ? item.id : typeof item.name === 'string' ? item.name : '';
+            label =
+              (typeof item.display_name === 'string' && item.display_name) ||
+              (typeof item.displayName === 'string' && item.displayName) ||
+              (typeof item.name === 'string' && item.name) ||
+              '';
+          }
+        }
+        id = String(id).trim();
+        if (id === '' || seen.has(id)) continue;
+        seen.add(id);
+        models.push({ id, label: String(label || id).trim() });
+      }
+      models.sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
+      return models;
+    }
+
+    /** 带稳定错误码的 Error（客户端版）。 */
+    function modelError(code, detail) {
+      const error = new Error(code);
+      error.code = code;
+      error.detail = detail;
+      return error;
+    }
+
+    /**
+     * 浏览器直连平台 `/models`。
+     * 实测 OpenAI / DeepSeek / Moonshot / SiliconFlow / OpenRouter / Gemini 都允许
+     * 浏览器跨域（ACAO 回显或 *），所以优先直连，省掉一次 Host 转发；
+     * Anthropic 会校验浏览器来源、且需要专用请求头，直接交给 Host 代理。
+     * @param {{protocol:string, baseUrl:string, apiKey:string, providerId:string}} options
+     */
+    async function fetchModelsDirect({ protocol, baseUrl, apiKey, providerId }) {
+      const headers = { accept: 'application/json' };
+      let url;
+      if (protocol === 'google') {
+        url = `${baseUrl}/models${apiKey === '' ? '' : `?key=${encodeURIComponent(apiKey)}`}`;
+      } else {
+        url = `${baseUrl}/models`;
+        if (apiKey !== '') headers.authorization = `Bearer ${apiKey}`;
+        if (providerId === 'openrouter') {
+          headers['http-referer'] = 'https://github.com/mhxy13867806343/dsh-plugin-select-model';
+          headers['x-title'] = 'DSH select model';
+        }
+      }
+      let response;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers,
+          mode: 'cors',
+          redirect: 'follow',
+          signal: AbortSignal.timeout(8000),
+        });
+      } catch (error) {
+        const aborted = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+        throw modelError(aborted ? 'timeout' : 'network-error', String(error?.message ?? error));
+      }
+      if (!response.ok) throw modelError(`http_${response.status}`, '');
+      const parsed = await response.json().catch(() => null);
+      if (parsed === null) throw modelError('invalid-json', '');
+      const models = normalizeModelPayload(parsed, protocol);
+      if (models.length === 0) throw modelError('empty-list', '');
+      return { models, count: models.length };
+    }
+
     /** 把 Host 返回的错误码翻译成用户可读的一句话；未知错误码给出兜底文案。 */
     function describeModelError(t, code) {
       const key = `model.err.${code}`;
@@ -756,7 +855,7 @@ window.__ModuleLoader__.load({
         return source.filter((item) => `${item.id} ${item.label ?? ''}`.toLowerCase().includes(needle));
       }, [source, query]);
 
-      /** 询问 Host 代理：按当前服务商 / 地址 / Key 拉取平台模型列表。 */
+      /** 拉取平台模型列表：先试浏览器直连，失败再交给 Host 代理（兼容 Anthropic / 自建网关）。 */
       const fetchModels = useCallback(async () => {
         if (provider.id === 'custom') return;
         const trimmedBase = (baseUrl.trim() || provider.baseUrl).trim();
@@ -768,6 +867,29 @@ window.__ModuleLoader__.load({
         requestSeq.current = seq;
         setLoading(true);
         setErrorCode(null);
+        const trimmedKey = apiKey.trim();
+
+        // ① 直连。Anthropic 走不了浏览器直连（来源校验 + 专用头），直接跳过。
+        if (provider.protocol !== 'anthropic') {
+          try {
+            const direct = await fetchModelsDirect({
+              protocol: provider.protocol,
+              baseUrl: trimmedBase,
+              apiKey: trimmedKey,
+              providerId: provider.id,
+            });
+            if (requestSeq.current !== seq) return;
+            setModels(direct.models);
+            setErrorCode(null);
+            setLoading(false);
+            return;
+          } catch (directError) {
+            if (requestSeq.current !== seq) return;
+            // 直连失败（典型是 CORS / 平台不允许浏览器访问）→ 继续试 Host 代理
+          }
+        }
+
+        // ② Host 代理兜底。
         try {
           const response = await fetch(MODELS_ROUTE, {
             method: 'POST',
@@ -776,7 +898,7 @@ window.__ModuleLoader__.load({
               providerId: provider.id,
               protocol: provider.protocol,
               baseUrl: trimmedBase,
-              apiKey: apiKey.trim(),
+              apiKey: trimmedKey,
             }),
           });
           const data = await response.json().catch(() => null);
@@ -1472,6 +1594,9 @@ window.__ModuleLoader__.load({
             triggerCount: triggers.length,
             triggers,
             modelMenuCount: modelMenus,
+            dialogNodes: document.querySelectorAll('[data-testid="select-model-dialog"]').length,
+            pickerNodes: document.querySelectorAll('.dsm-modelRow').length,
+            modelMenuNodes: document.querySelectorAll('.dsm-modelMenu').length,
           };
         };
 
@@ -1553,6 +1678,10 @@ window.__ModuleLoader__.load({
           const modelInput = dialog.querySelector('.dsm-modelRow input');
           const picker = {
             status: (pickerStatusNode?.textContent ?? '').trim(),
+            statusAll: Array.from(dialog.querySelectorAll('.dsm-modelStatus')).map((node) =>
+              (node.textContent ?? '').trim(),
+            ),
+            dialogCountAtRead: document.querySelectorAll('[data-testid="select-model-dialog"]').length,
             tone: pickerStatusNode?.getAttribute('data-tone') ?? null,
             modelValue: modelInput instanceof HTMLInputElement ? modelInput.value : null,
             hasDropdown: dialog.querySelector('.dsm-modelBtn') !== null,
@@ -1569,14 +1698,16 @@ window.__ModuleLoader__.load({
                 () => {
                   const menuNode = document.querySelector('.dsm-modelMenu');
                   if (menuNode === null) return null;
-                  const items = menuNode.querySelectorAll('.dsm-modelItem').length;
                   const statusNode = dialog.querySelector('.dsm-modelStatus');
                   const status = (statusNode?.textContent ?? '').trim();
-                  const failed = status.includes('失败') || status.includes('failed');
-                  return items > 0 || failed ? true : null;
+                  const busy = status.includes('正在') || status.includes('Fetching');
+                  if (busy) return null; // 还在拉平台列表，别把内置常用型号当成结果
+                  const items = menuNode.querySelectorAll('.dsm-modelItem').length;
+                  return items > 0 ? true : null;
                 },
-                8000,
+                12000,
               );
+              await sleep(160);
             }
             const menuNode = document.querySelector('.dsm-modelMenu');
             const items = menuNode === null ? [] : Array.from(menuNode.querySelectorAll('.dsm-modelItem'));
@@ -1606,6 +1737,33 @@ window.__ModuleLoader__.load({
                 hint === null ? null : hint.getBoundingClientRect().bottom <= finalRect.bottom - 24,
             },
           };
+        };
+
+        /** 直接验证「浏览器直连平台 /models」（不经过 Host 代理）。 */
+        const directProbe = async (input) => {
+          const startedAt = Date.now();
+          const body = {
+            providerId: typeof input?.providerId === 'string' ? input.providerId : 'openrouter',
+            protocol: typeof input?.protocol === 'string' ? input.protocol : 'openrouter',
+            baseUrl: typeof input?.baseUrl === 'string' ? input.baseUrl : 'https://openrouter.ai/api/v1',
+            apiKey: typeof input?.apiKey === 'string' ? input.apiKey : '',
+          };
+          try {
+            const result = await fetchModelsDirect(body);
+            return {
+              ok: true,
+              elapsedMs: Date.now() - startedAt,
+              count: result.count,
+              sample: result.models.slice(0, 8),
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              elapsedMs: Date.now() - startedAt,
+              error: typeof error?.code === 'string' ? error.code : 'direct-failed',
+              detail: String(error?.detail ?? error?.message ?? error).slice(0, 300),
+            };
+          }
         };
 
         /** 直接探测 Host 的模型列表代理（不经过 UI），用于验证路由与归一化结果。 */
@@ -1809,6 +1967,22 @@ window.__ModuleLoader__.load({
                     outputSchema: { description: '打开结果、弹窗尺寸与模型选择器状态。' },
                   },
                   {
+                    name: 'directProbe',
+                    description:
+                      '直接验证「浏览器直连平台 /models」：不经过 Host 代理，验证 CORS 是否放行、归一化是否正确；默认用 OpenRouter 公开列表。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        providerId: { type: 'string', description: '服务商 id，默认 openrouter' },
+                        protocol: { type: 'string', description: 'openai | google | openrouter，默认 openrouter' },
+                        baseUrl: { type: 'string', description: '接口地址，默认 https://openrouter.ai/api/v1' },
+                        apiKey: { type: 'string', description: '可选：仅用于这一次探测，不落盘' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '直连结果：耗时、数量与样例模型。' },
+                  },
+                  {
                     name: 'modelProbe',
                     description:
                       '直接调用 Host 的模型列表代理（GET /api/select-model/models 的 POST 版本），验证路由与归一化结果；默认用 OpenRouter 的公开列表，无需 Key。',
@@ -1837,6 +2011,7 @@ window.__ModuleLoader__.load({
                 if (method === 'selfTest') return selfTest();
                 if (method === 'menu') return openMenu();
                 if (method === 'preview') return openPreview(input);
+                if (method === 'directProbe') return directProbe(input);
                 if (method === 'modelProbe') return modelProbe(input);
                 if (method === 'close') return closePreview();
                 return { ok: false, error: `unknown-method:${method}` };
