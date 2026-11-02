@@ -139,7 +139,7 @@ window.__ModuleLoader__.load({
       'edit.apiKeyPlaceholder': '留空保持不变',
       'edit.save': '保存',
       'confirm.title': '删除模型',
-      'confirm.desc': '确定删除「{name}」吗？会同时移除模型服务配置和保存的 Key，且无法撤销。',
+      'confirm.desc': '确定删除「{name}」（配置 ID：{route}）吗？会同时移除模型服务配置和保存的 Key，且无法撤销。',
       'confirm.delete': '删除',
       'confirm.cancel': '取消',
       'action.save': '保存',
@@ -239,7 +239,7 @@ window.__ModuleLoader__.load({
       'edit.apiKeyPlaceholder': 'Leave blank to keep the current key',
       'edit.save': 'Save',
       'confirm.title': 'Delete model',
-      'confirm.desc': 'Delete “{name}”? This removes the model-service config and the stored key; it cannot be undone.',
+      'confirm.desc': 'Delete “{name}” (config ID: {route})? This removes the model-service config and the stored key; it cannot be undone.',
       'confirm.delete': 'Delete',
       'confirm.cancel': 'Cancel',
       'action.save': 'Save',
@@ -1882,7 +1882,7 @@ window.__ModuleLoader__.load({
      * @param {ReturnType<typeof createStore>} store 共享 store
      * @param {(key:string) => string} t 翻译
      */
-    function installInspectProvider(ctx, store, t, helpers) {
+    function installInspectProvider(ctx, store, t) {
       ctx.inject(['cordisInspect'], (inspectCtx) => {
         const registry = inspectCtx.cordisInspect;
         if (registry === undefined || registry === null || typeof registry.register !== 'function') return () => {};
@@ -1943,11 +1943,7 @@ window.__ModuleLoader__.load({
         /** 打开模型菜单 → 点「管理已添加模型」→ 读取管理弹窗；可试开编辑/删除弹窗（不保存/不删除）。 */
         const manageProbe = async (input) => {
           const action =
-            input?.action === 'edit' || input?.action === 'editSave'
-              ? input.action
-              : input?.action === 'delete' || input?.action === 'deleteConfirm'
-                ? input.action
-                : 'none';
+            input?.action === 'edit' ? 'edit' : input?.action === 'delete' ? 'delete' : 'none';
           if (store.get().open === true || store.get().manageOpen === true) {
             store.set({ open: false, manageOpen: false });
           }
@@ -2002,9 +1998,7 @@ window.__ModuleLoader__.load({
           result.ok = rows.length >= 0;
           if (action !== 'none' && rows.length > 0) {
             const button = rows[0].querySelector(
-              action === 'edit' || action === 'editSave'
-                ? 'button[data-action="edit"]'
-                : 'button[data-action="delete"]',
+              action === 'edit' ? 'button[data-action="edit"]' : 'button[data-action="delete"]',
             );
             if (button === null) {
               const buttons = rows[0].querySelectorAll('button');
@@ -2014,38 +2008,10 @@ window.__ModuleLoader__.load({
               button.click();
             }
             const modal =
-              action === 'edit' || action === 'editSave'
+              action === 'edit'
                 ? await waitFor(() => document.querySelector('[data-testid="select-model-edit-dialog"]'), 2500)
                 : await waitFor(() => document.querySelector('[data-testid="select-model-confirm-dialog"]'), 2500);
             if (modal !== null) {
-              if (action === 'editSave') {
-                const saveButton = modal.querySelector('.dsm-footer .dsm-btn[data-variant="primary"]');
-                if (saveButton instanceof HTMLElement) {
-                  saveButton.click();
-                  await waitFor(
-                    () => (document.querySelector('[data-testid="select-model-edit-dialog"]') === null ? true : null),
-                    5000,
-                  );
-                  await sleep(300);
-                  result.edited = document.querySelector('[data-testid="select-model-edit-dialog"]') === null;
-                }
-              }
-              if (action === 'deleteConfirm') {
-                const confirm = modal.querySelector('.dsm-footer .dsm-btn[data-variant="danger"]');
-                if (confirm instanceof HTMLElement) {
-                  confirm.click();
-                  await waitFor(
-                    () =>
-                      document.querySelector('[data-testid="select-model-confirm-dialog"]') === null
-                        ? true
-                        : null,
-                    5000,
-                  );
-                  await sleep(300);
-                  const still = document.querySelector('[data-testid="select-model-confirm-dialog"]');
-                  result.deleted = still === null;
-                }
-              }
               result.actionDialog = {
                 testid: modal.getAttribute('data-testid'),
                 title: (modal.querySelector('.dsm-title')?.textContent ?? '').trim(),
@@ -2216,29 +2182,6 @@ window.__ModuleLoader__.load({
                 hint === null ? null : hint.getBoundingClientRect().bottom <= finalRect.bottom - 24,
             },
           };
-        };
-
-        /** 调试：真实调用 settings.mutate(unset) 与 credentials.unset，回报返回值或抛出的错误。 */
-        const mutateProbe = async (input) => {
-          const route = typeof input?.route === 'string' ? input.route : 'sel-doesnotexist';
-          const out = { route };
-          try {
-            const response = await helpers.mutateProviders([{ op: 'unset', path: ['providers', route] }]);
-            out.mutate =
-              response.ok === true
-                ? { ok: true, revision: response.value?.revision ?? null }
-                : { ok: false, code: response.error?.code, message: response.error?.message };
-          } catch (error) {
-            out.mutateThrown = { name: error?.name ?? null, message: String(error?.message ?? error) };
-          }
-          try {
-            const cred = await ctx.remote.credentials.unset('SEL_DOES_NOT_EXIST');
-            out.credential =
-              cred.ok === true ? { ok: true } : { ok: false, code: cred.error?.code, message: cred.error?.message };
-          } catch (error) {
-            out.credentialThrown = { name: error?.name ?? null, message: String(error?.message ?? error) };
-          }
-          return out;
         };
 
         /** 只读：通过 remote.settings.describe 验证客户端能读到 llm-pi-ai 的配置与 revision。 */
@@ -2492,7 +2435,7 @@ window.__ModuleLoader__.load({
                     inputSchema: {
                       type: 'object',
                       properties: {
-                        action: { type: 'string', description: 'none | edit | editSave | delete | deleteConfirm，默认 none' },
+                        action: { type: 'string', description: 'none | edit | delete（只打开弹窗，不保存/不删除），默认 none' },
                       },
                       additionalProperties: false,
                     },
@@ -2519,16 +2462,6 @@ window.__ModuleLoader__.load({
                       additionalProperties: false,
                     },
                     outputSchema: { description: '打开结果、弹窗尺寸与模型选择器状态。' },
-                  },
-                  {
-                    name: 'mutateProbe',
-                    description: '调试：对指定 route 执行 settings.mutate(unset) 与 credentials.unset，返回原始结果或抛错（默认用不存在的 route，安全）。',
-                    inputSchema: {
-                      type: 'object',
-                      properties: { route: { type: 'string', description: 'route id，默认 sel-doesnotexist' } },
-                      additionalProperties: false,
-                    },
-                    outputSchema: { description: '原始返回与异常。' },
                   },
                   {
                     name: 'settingsProbe',
@@ -2582,7 +2515,6 @@ window.__ModuleLoader__.load({
                 if (method === 'menu') return openMenu();
                 if (method === 'preview') return openPreview(input);
                 if (method === 'settingsProbe') return settingsProbe();
-                if (method === 'mutateProbe') return mutateProbe(input);
                 if (method === 'manage') return manageProbe(input);
                 if (method === 'directProbe') return directProbe(input);
                 if (method === 'modelProbe') return modelProbe(input);
@@ -2820,7 +2752,7 @@ window.__ModuleLoader__.load({
                     '×',
                   ),
                 ),
-                h('p', { className: 'dsm-desc' }, t('confirm.desc', { name: target.displayName })),
+                h('p', { className: 'dsm-desc' }, t('confirm.desc', { name: target.displayName, route: target.route })),
                 error !== null
                   ? h(
                       'div',
@@ -3090,7 +3022,7 @@ window.__ModuleLoader__.load({
         );
 
         // 只读自检入口（cordis_inspect_query → client provider "SelectModel"）。
-        installInspectProvider(ctx, store, t, { mutateProviders });
+        installInspectProvider(ctx, store, t);
       },
     };
 
