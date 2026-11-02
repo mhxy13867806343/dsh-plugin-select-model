@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-select-model",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "在模型菜单底部增加「添加模型」入口：按服务商实时获取模型清单，添加后写入 DSH 模型服务配置并出现在模型菜单里。",
   "type": "module",

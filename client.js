@@ -694,6 +694,7 @@ window.__ModuleLoader__.load({
       onKeyDown,
       onFocus,
       onBlur,
+      onClick,
       readOnly,
       role,
       ariaExpanded,
@@ -718,6 +719,7 @@ window.__ModuleLoader__.load({
           onKeyDown,
           onFocus,
           onBlur,
+          onClick,
           onChange: (event) => {
             if (typeof onChange === 'function') onChange(event.target.value);
           },
@@ -1158,17 +1160,6 @@ window.__ModuleLoader__.load({
         };
       }, [open]);
 
-      // 列表较长时把焦点放进搜索框，方便直接筛。
-      useEffect(() => {
-        if (!open || source.length <= 10) return undefined;
-        const timer = window.setTimeout(() => {
-          searchRef.current?.focus();
-        }, 40);
-        return () => {
-          window.clearTimeout(timer);
-        };
-      }, [open, source.length]);
-
       const choose = (item) => {
         onChange(item.id);
         setQuery('');
@@ -1347,6 +1338,12 @@ window.__ModuleLoader__.load({
               ariaExpanded: isCustom ? undefined : open,
               ariaControls: isCustom ? undefined : listId,
               onKeyDown: onInputKeyDown,
+              onFocus: () => {
+                if (!isCustom && !open) setOpen(true);
+              },
+              onClick: () => {
+                if (!isCustom && !open) setOpen(true);
+              },
             }),
           ),
           isCustom
@@ -1911,7 +1908,11 @@ window.__ModuleLoader__.load({
             items: [],
           };
           if (openModels) {
-            const button = dialog.querySelector('.dsm-modelBtn');
+            const openVia = input?.openVia === 'input' ? 'input' : 'button';
+            const button =
+              openVia === 'input'
+                ? dialog.querySelector('.dsm-modelRow input')
+                : dialog.querySelector('.dsm-modelBtn');
             if (button instanceof HTMLElement) {
               button.click();
               await waitFor(
@@ -2182,6 +2183,7 @@ window.__ModuleLoader__.load({
                         providerId: { type: 'string', description: '可选：切到某个服务商，如 openrouter / anthropic' },
                         openModels: { type: 'boolean', description: '可选：点开模型下列表并等待平台列表返回' },
                         direct: { type: 'boolean', description: '可选：绕过内置菜单直接打开弹窗（调试用）' },
+                        openVia: { type: 'string', description: '可选：点击输入框(input)或箭头(button)展开模型列表，默认 button' },
                       },
                       additionalProperties: false,
                     },

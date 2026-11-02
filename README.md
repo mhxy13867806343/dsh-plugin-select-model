@@ -11,7 +11,7 @@
 - **模型菜单底部新增一行「添加模型」**：位置在推理等级等原生行之后，带分隔线；样式克隆自原生菜单行（同样的类名与右侧 chevron），所以深浅色主题、hover、键盘走查都与相邻行一致。
 - **点击后打开「添加模型」弹窗**：遮罩层里一个居中面板，包含
   - 第三方服务商网格：OpenAI、Anthropic、Google Gemini、DeepSeek、阿里云百炼、智谱、Moonshot、硅基流动、OpenRouter，以及「自定义（OpenAI 兼容）」；
-  - 字段：API Key、Base URL、**模型名称（下拉选择 / 搜索 / 手动输入）**；
+  - 字段：API Key、Base URL、**模型名称（点击输入框或箭头展开下拉，可搜索、也可以直接手输）**；
   - 底部按钮：取消 / 添加模型。
 - **模型列表按平台实时获取**：切换服务商会清空上一个平台的模型选择，并按该平台协议请求 `/models`：
   OpenAI 兼容（Bearer）、Anthropic（`x-api-key` + `anthropic-version`）、Google Gemini（`?key=`，并过滤掉不支持 `generateContent` 的模型）、OpenRouter（公开列表）。平台没返回、没填 Key 或网络失败时，退回该服务商内置的常用型号，仍可手动输入。
