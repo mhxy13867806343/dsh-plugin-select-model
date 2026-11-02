@@ -121,6 +121,10 @@ window.__ModuleLoader__.load({
       'toast.added': '已添加「{model}」，打开模型菜单即可使用',
       'toast.updated': '已更新「{model}」',
       'toast.deleted': '已删除「{model}」',
+      'manage.menuRow': '管理已添加模型',
+      'manage.count': '{n} 个',
+      'manage.loading': '加载中…',
+      'manage.done': '完成',
       'manage.title': '已添加的第三方模型',
       'manage.search': '搜索已添加…',
       'manage.empty': '还没有添加第三方模型',
@@ -216,6 +220,10 @@ window.__ModuleLoader__.load({
       'toast.added': 'Added “{model}” — open the model menu to use it',
       'toast.updated': 'Updated “{model}”',
       'toast.deleted': 'Deleted “{model}”',
+      'manage.menuRow': 'Manage added models',
+      'manage.count': '{n}',
+      'manage.loading': 'Loading…',
+      'manage.done': 'Done',
       'manage.title': 'Added third-party models',
       'manage.search': 'Search added models…',
       'manage.empty': 'No third-party models added yet',
@@ -513,6 +521,14 @@ window.__ModuleLoader__.load({
 .dsm-addedBtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.2));color:var(--dsw-alias-label-primary,#e6e6e6)}
 .dsm-addedBtn[data-danger="1"]:hover{background:var(--dsw-alias-interactive-bg-hover-danger,rgba(248,81,73,.16));color:var(--dsw-alias-state-error-primary,#f85149)}
 .dsm-addedEmpty{padding:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-manageBody{display:flex;flex-direction:column;gap:10px;margin-top:20px;padding:0 24px;min-height:0;overflow-y:auto;max-height:min(60vh,460px)}
+.dsm-manageList{display:flex;flex-direction:column;gap:4px}
+.dsm-manageRow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-layer-1,rgba(127,127,127,.05))}
+.dsm-manageMain{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.dsm-manageName{font-size:13px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-primary,#e6e6e6)}
+.dsm-manageSub{font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
+.dsm-manageActions{display:flex;align-items:center;gap:6px;flex:none}
+.dsm-manageEmpty{padding:18px 4px;text-align:center;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8a8a)}
 .dsm-btn[data-variant="danger"]{background:var(--dsw-alias-state-error-primary,#f85149);color:#fff}
 .dsm-btn[data-variant="danger"]:hover:not(:disabled){filter:brightness(1.08)}
 .dsm-modelRefresh:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));color:var(--dsw-alias-label-primary,#e6e6e6)}
@@ -617,12 +633,7 @@ window.__ModuleLoader__.load({
       const owner = Math.random().toString(36).slice(2, 10);
       const loadAdded = typeof options?.loadAdded === 'function' ? options.loadAdded : async () => [];
       const bridge = options?.bridge ?? { refresh: () => {} };
-
-      let addedItems = [];
-      let addedQuery = '';
-      let sectionEl = null;
-      let listEl = null;
-      let refreshedMenu = null;
+      let inspectedMenu = null;
 
       /** 找到当前打开的模型根菜单（只认内置 zh/en 两个 aria-label）。 */
       const findModelRootMenu = () => {
@@ -654,173 +665,36 @@ window.__ModuleLoader__.load({
         fallback.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       };
 
-      /** 菜单里的「已添加第三方模型」：重建列表部分（不动搜索框，避免输入时丢焦点）。 */
-      const renderAddedList = () => {
-        if (listEl === null || !listEl.isConnected) return;
-        listEl.replaceChildren();
-        const needle = addedQuery.trim().toLowerCase();
-        const filtered =
-          needle === ''
-            ? addedItems
-            : addedItems.filter((item) =>
-                `${item.displayName} ${item.modelId} ${item.baseURL}`.toLowerCase().includes(needle),
-              );
-        if (filtered.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'dsm-addedEmpty';
-          empty.textContent = t('manage.empty');
-          listEl.append(empty);
-          return;
-        }
-        for (const item of filtered) {
-          const rowEl = document.createElement('div');
-          rowEl.className = 'dsm-addedRow';
-          rowEl.setAttribute('data-dsm-added-row', '');
-          rowEl.setAttribute('data-route', item.route);
-
-          const main = document.createElement('div');
-          main.className = 'dsm-addedMain';
-          const name = document.createElement('span');
-          name.className = 'dsm-addedName';
-          name.textContent = item.displayName;
-          name.title = item.displayName;
-          const sub = document.createElement('span');
-          sub.className = 'dsm-addedSub';
-          sub.textContent = item.modelId || item.baseURL;
-          sub.title = `${item.modelId} ${item.baseURL}`.trim();
-          main.append(name, sub);
-
-          const actions = document.createElement('div');
-          actions.className = 'dsm-addedActions';
-          const editBtn = document.createElement('button');
-          editBtn.type = 'button';
-          editBtn.className = 'dsm-addedBtn';
-          editBtn.textContent = t('manage.edit');
-          editBtn.setAttribute('data-action', 'edit');
-          editBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const menu = findModelRootMenu();
-            if (menu !== null) {
-              try {
-                closeBuiltInMenu(menu);
-              } catch {
-                /* 关不掉也让弹窗打开 */
-              }
-            }
-            store.set({ editTarget: item });
-          });
-          const deleteBtn = document.createElement('button');
-          deleteBtn.type = 'button';
-          deleteBtn.className = 'dsm-addedBtn';
-          deleteBtn.setAttribute('data-danger', '1');
-          deleteBtn.setAttribute('data-action', 'delete');
-          deleteBtn.textContent = t('manage.delete');
-          deleteBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const menu = findModelRootMenu();
-            if (menu !== null) {
-              try {
-                closeBuiltInMenu(menu);
-              } catch {
-                /* 关不掉也让弹窗打开 */
-              }
-            }
-            store.set({ confirmTarget: item });
-          });
-          actions.append(editBtn, deleteBtn);
-          rowEl.append(main, actions);
-          listEl.append(rowEl);
-        }
-      };
-
-      /** 重建整个管理区；items 为空时整块隐藏，保持菜单干净。 */
-      const renderAddedSection = () => {
-        if (sectionEl === null || !sectionEl.isConnected) return;
-        sectionEl.replaceChildren();
-        listEl = null;
-        if (addedItems.length === 0) {
-          sectionEl.hidden = true;
-          return;
-        }
-        sectionEl.hidden = false;
-
-        const head = document.createElement('div');
-        head.className = 'dsm-addedHead';
-        const title = document.createElement('span');
-        title.textContent = t('manage.title');
-        const count = document.createElement('span');
-        count.className = 'dsm-addedCount';
-        count.textContent = String(addedItems.length);
-        head.append(title, count);
-        sectionEl.append(head);
-
-        if (addedItems.length > 1) {
-          const searchWrap = document.createElement('span');
-          searchWrap.className = 'dsm-addedSearch';
-          const input = document.createElement('input');
-          input.type = 'search';
-          input.placeholder = t('manage.search');
-          input.value = addedQuery;
-          input.setAttribute('aria-label', t('manage.search'));
-          input.addEventListener('input', () => {
-            addedQuery = input.value;
-            renderAddedList();
-          });
-          searchWrap.append(input);
-          sectionEl.append(searchWrap);
-        }
-
-        listEl = document.createElement('div');
-        listEl.className = 'dsm-addedList';
-        sectionEl.append(listEl);
-        renderAddedList();
-      };
-
-      /** 拉一次已添加列表并渲染。 */
-      const refreshAdded = async (menu) => {
-        if (menu !== null) ensureSection(menu);
+      /** 管理行右侧显示「N 个」（异步取一次列表）。 */
+      const updateCount = async (menu) => {
+        let items = [];
         try {
-          addedItems = await loadAdded();
+          items = await loadAdded();
         } catch {
-          addedItems = [];
+          items = [];
         }
         if (disposed) return;
-        renderAddedSection();
+        const row = menu.querySelector(`[data-dsm-manage-row][data-dsm-owner="${owner}"]`);
+        if (!(row instanceof HTMLElement)) return;
+        const spans = Array.from(row.children).filter(
+          (node) => node instanceof HTMLElement && node.tagName === 'SPAN',
+        );
+        if (spans[1] !== undefined) spans[1].textContent = t('manage.count', { n: items.length });
       };
+
       bridge.refresh = () => {
         const menu = findModelRootMenu();
-        if (menu === null) return;
-        void refreshAdded(menu);
+        if (menu !== null) void updateCount(menu);
       };
 
-      /** 确保菜单末尾有管理区容器。 */
-      const ensureSection = (menu) => {
-        let section = menu.querySelector(':scope > [data-dsm-added]');
-        if (!(section instanceof HTMLElement)) {
-          section = document.createElement('div');
-          section.className = 'dsm-added';
-          section.setAttribute('data-dsm-added', '');
-          section.setAttribute('data-dsm-owner', owner);
-          menu.append(section);
-        }
-        if (section !== sectionEl) {
-          sectionEl = section;
-          listEl = null;
-        }
-        return section;
-      };
-
-      /** 给一个刚打开的根菜单补齐分隔线 + 添加模型行 + 管理区。 */
+      /** 给一个刚打开的根菜单补齐：添加模型行 + 管理已添加模型行。 */
       const injectInto = (menu) => {
         if (disposed) return false;
         const rowExists = menu.querySelector(`:scope > [${ROW_ATTR}]`) !== null;
         if (rowExists) {
-          ensureSection(menu);
-          if (refreshedMenu !== menu) {
-            refreshedMenu = menu;
-            void refreshAdded(menu);
+          if (inspectedMenu !== menu) {
+            inspectedMenu = menu;
+            void updateCount(menu);
           }
           return true;
         }
@@ -832,22 +706,28 @@ window.__ModuleLoader__.load({
         if (cells.length === 0) return false;
 
         const template = cells[cells.length - 1];
-        const row = template.cloneNode(true);
-        if (!(row instanceof HTMLElement)) return false;
-        row.removeAttribute('id');
-        row.removeAttribute('disabled');
-        row.removeAttribute('aria-disabled');
-        row.setAttribute(ROW_ATTR, '');
-        row.setAttribute('data-dsm-owner', owner);
-        row.setAttribute('data-testid', 'select-model-add-row');
+        const makeRow = (label, value, marker, testId) => {
+          const row = template.cloneNode(true);
+          if (!(row instanceof HTMLElement)) return null;
+          row.removeAttribute('id');
+          row.removeAttribute('disabled');
+          row.removeAttribute('aria-disabled');
+          row.setAttribute(marker, '');
+          row.setAttribute('data-dsm-owner', owner);
+          row.setAttribute('data-testid', testId);
+          const spans = Array.from(row.children).filter(
+            (node) => node instanceof HTMLElement && node.tagName === 'SPAN',
+          );
+          if (spans[0] !== undefined) spans[0].textContent = label;
+          if (spans[1] !== undefined) spans[1].textContent = value;
+          return row;
+        };
 
-        const spans = Array.from(row.children).filter(
-          (node) => node instanceof HTMLElement && node.tagName === 'SPAN',
-        );
-        if (spans[0] !== undefined) spans[0].textContent = t('menu.add');
-        if (spans[1] !== undefined) spans[1].textContent = t('menu.addHint');
+        const addRow = makeRow(t('menu.add'), t('menu.addHint'), ROW_ATTR, 'select-model-add-row');
+        const manageRow = makeRow(t('manage.menuRow'), t('manage.loading'), 'data-dsm-manage-row', 'select-model-manage-row');
+        if (addRow === null || manageRow === null) return false;
 
-        row.addEventListener('click', (event) => {
+        addRow.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
           try {
@@ -857,6 +737,16 @@ window.__ModuleLoader__.load({
           }
           store.set({ open: true });
         });
+        manageRow.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            closeBuiltInMenu(menu);
+          } catch {
+            /* 关不掉也不影响打开弹窗 */
+          }
+          store.set({ manageOpen: true });
+        });
 
         const divider = document.createElement('div');
         divider.setAttribute(DIVIDER_ATTR, '');
@@ -864,9 +754,9 @@ window.__ModuleLoader__.load({
         divider.style.cssText =
           'flex:none;height:1px;margin:4px 8px;background:var(--dsw-alias-border-l1,rgba(127,127,127,.28))';
 
-        menu.append(divider, row);
-        refreshedMenu = menu;
-        void refreshAdded(menu);
+        menu.append(divider, addRow, manageRow);
+        inspectedMenu = menu;
+        void updateCount(menu);
         return true;
       };
 
@@ -899,6 +789,7 @@ window.__ModuleLoader__.load({
         if (observer !== null) observer.disconnect();
         observer = null;
         document.querySelectorAll(`[${ROW_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
+        document.querySelectorAll(`[data-dsm-manage-row][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
         document.querySelectorAll(`[${DIVIDER_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
         document.querySelectorAll(`[data-dsm-added][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
       };
@@ -2047,10 +1938,12 @@ window.__ModuleLoader__.load({
           };
         };
 
-        /** 打开模型菜单，读取「已添加列表」并可试开编辑/删除弹窗（不保存/不删除）。 */
+        /** 打开模型菜单 → 点「管理已添加模型」→ 读取管理弹窗；可试开编辑/删除弹窗（不保存/不删除）。 */
         const manageProbe = async (input) => {
           const action = input?.action === 'edit' || input?.action === 'delete' ? input.action : 'none';
-          if (store.get().open === true) store.set({ open: false });
+          if (store.get().open === true || store.get().manageOpen === true) {
+            store.set({ open: false, manageOpen: false });
+          }
           let menu = findMenu();
           if (menu === null) {
             const trigger = findTrigger();
@@ -2059,57 +1952,65 @@ window.__ModuleLoader__.load({
             menu = await waitFor(findMenu);
           }
           if (menu === null) return { ok: false, reason: 'model-menu-not-opened' };
-          const rows = await waitFor(
-            () => {
-              const list = document.querySelectorAll('[data-dsm-added-row]');
-              if (list.length > 0) return list;
-              const section = document.querySelector('[data-dsm-added]');
-              return section !== null && section.hidden === false ? list : null;
-            },
-            6000,
+          const manageRow = await waitFor(
+            () => menu.querySelector('[data-dsm-manage-row]'),
+            3000,
           );
-          const addedNodes = Array.from(document.querySelectorAll('[data-dsm-added-row]'));
           const result = {
-            ok: addedNodes.length > 0,
+            ok: false,
             menuRows: Array.from(menu.children)
               .filter((node) => node instanceof HTMLElement && node.matches('button[role="menuitem"]'))
               .map((node) => (node.textContent ?? '').trim()),
-            addedCount: addedNodes.length,
-            addedRows: addedNodes.map((node) => ({
-              text: (node.textContent ?? '').trim(),
-              route: node.getAttribute('data-route'),
-            })),
-            hasSearch: document.querySelector('[data-dsm-added] input[type="search"]') !== null,
-            sectionVisible: document.querySelector('[data-dsm-added]')?.hidden === false,
+            manageRowText: manageRow === null ? null : (manageRow.textContent ?? '').trim(),
+            manageDialog: null,
             actionDialog: null,
           };
-          if (action !== 'none' && addedNodes.length > 0) {
-            const button = addedNodes[0].querySelector(
-              action === 'edit' ? '[data-action="edit"]' : '[data-action="delete"]',
+          if (manageRow === null) return result;
+          manageRow.click();
+          const dialog = await waitFor(
+            () => document.querySelector('[data-testid="select-model-manage-dialog"]'),
+            3000,
+          );
+          if (dialog === null) return result;
+          await sleep(200);
+          const rows = Array.from(dialog.querySelectorAll('.dsm-manageRow'));
+          result.manageDialog = {
+            title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
+            hasSearch: dialog.querySelector('input') !== null,
+            rowCount: rows.length,
+            rows: rows.map((node) => ({
+              name: (node.querySelector('.dsm-manageName')?.textContent ?? '').trim(),
+              sub: (node.querySelector('.dsm-manageSub')?.textContent ?? '').trim(),
+              buttons: Array.from(node.querySelectorAll('button')).map((button) => (button.textContent ?? '').trim()),
+            })),
+          };
+          result.ok = rows.length >= 0;
+          if (action !== 'none' && rows.length > 0) {
+            const button = rows[0].querySelector(
+              action === 'edit' ? 'button[data-action="edit"]' : 'button[data-action="delete"]',
             );
             if (button === null) {
-              // 编辑/删除按钮没有 data-action，按文本匹配兜底
-              const candidates = addedNodes[0].querySelectorAll('button');
-              const target =
-                action === 'edit' ? candidates[0] : candidates[candidates.length - 1];
+              const buttons = rows[0].querySelectorAll('button');
+              const target = action === 'edit' ? buttons[0] : buttons[buttons.length - 1];
               if (target instanceof HTMLElement) target.click();
             } else if (button instanceof HTMLElement) {
               button.click();
             }
-            const dialog =
+            const modal =
               action === 'edit'
                 ? await waitFor(() => document.querySelector('[data-testid="select-model-edit-dialog"]'), 2500)
                 : await waitFor(() => document.querySelector('[data-testid="select-model-confirm-dialog"]'), 2500);
-            if (dialog !== null) {
+            if (modal !== null) {
               result.actionDialog = {
-                title: (dialog.querySelector('.dsm-title')?.textContent ?? '').trim(),
-                description: (dialog.querySelector('.dsm-desc')?.textContent ?? '').trim(),
-                fields: Array.from(dialog.querySelectorAll('input')).map((node) => ({
+                testid: modal.getAttribute('data-testid'),
+                title: (modal.querySelector('.dsm-title')?.textContent ?? '').trim(),
+                description: (modal.querySelector('.dsm-desc')?.textContent ?? '').trim(),
+                inputs: Array.from(modal.querySelectorAll('input')).map((node) => ({
                   value: node.value,
                   placeholder: node.getAttribute('placeholder'),
                   type: node.getAttribute('type'),
                 })),
-                buttons: Array.from(dialog.querySelectorAll('.dsm-footer .dsm-btn')).map((node) => ({
+                footer: Array.from(modal.querySelectorAll('.dsm-footer .dsm-btn')).map((node) => ({
                   text: (node.textContent ?? '').trim(),
                   variant: node.getAttribute('data-variant'),
                 })),
@@ -2372,8 +2273,11 @@ window.__ModuleLoader__.load({
 
         /** 收起弹窗（以及可能残留的模型菜单），恢复现场。 */
         const closePreview = async () => {
-          store.set({ open: false });
+          store.set({ open: false, manageOpen: false, editTarget: null, confirmTarget: null });
           await waitFor(() => store.get().open === false, 800);
+          document
+            .querySelectorAll('[data-testid="select-model-dialog"], [data-testid="select-model-manage-dialog"], [data-testid="select-model-edit-dialog"], [data-testid="select-model-confirm-dialog"]')
+            .forEach((node) => node.closest('.dsm-root')?.remove());
           const menu = findMenu();
           if (menu !== null) {
             const trigger = findTrigger();
@@ -2626,7 +2530,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ensureStyles(), 'select-model: styles');
 
         // 共享状态：菜单行点击 → 打开弹窗；提交 → 关闭 + Toast。
-        const store = createStore({ open: false, toast: null, editTarget: null, confirmTarget: null });
+        const store = createStore({ open: false, toast: null, editTarget: null, confirmTarget: null, manageOpen: false, manageVersion: 0 });
         let toastTimer = null;
 
         const showToast = (text) => {
@@ -2856,12 +2760,123 @@ window.__ModuleLoader__.load({
           );
         }
 
+        /** 「已添加的第三方模型」管理弹窗：搜索 + 列表 + 编辑/删除。 */
+        function ManageDialog({ onClose }) {
+          const version = useStoreValue(store, (state) => state.manageVersion);
+          const [items, setItems] = useState(null);
+          const [query, setQuery] = useState('');
+
+          useEffect(() => {
+            let alive = true;
+            loadAdded()
+              .then((list) => {
+                if (alive) setItems(list);
+              })
+              .catch(() => {
+                if (alive) setItems([]);
+              });
+            return () => {
+              alive = false;
+            };
+          }, [version]);
+
+          const needle = query.trim().toLowerCase();
+          const filtered =
+            items === null
+              ? []
+              : needle === ''
+                ? items
+                : items.filter((item) =>
+                    `${item.displayName} ${item.modelId} ${item.baseURL}`.toLowerCase().includes(needle),
+                  );
+
+          return h(
+            'div',
+            { className: 'dsm-root' },
+            h('div', { className: 'dsm-mask', 'aria-hidden': 'true', onClick: onClose }),
+            h(
+              'div',
+              {
+                className: 'dsm-dialog',
+                role: 'dialog',
+                'aria-modal': 'true',
+                'aria-label': t('manage.title'),
+                'data-testid': 'select-model-manage-dialog',
+              },
+              h(
+                'div',
+                { className: 'dsm-content' },
+                h(
+                  'div',
+                  { className: 'dsm-header' },
+                  h('h2', { className: 'dsm-title' }, t('manage.title')),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dsm-close', 'aria-label': t('action.close'), onClick: onClose },
+                    '×',
+                  ),
+                ),
+                h(
+                  'div',
+                  { className: 'dsm-manageBody' },
+                  h(DsmInput, {
+                    value: query,
+                    onChange: setQuery,
+                    placeholder: t('manage.search'),
+                    ariaLabel: t('manage.search'),
+                  }),
+                  items === null
+                    ? h('div', { className: 'dsm-manageEmpty' }, t('manage.loading'))
+                    : filtered.length === 0
+                      ? h('div', { className: 'dsm-manageEmpty' }, t('manage.empty'))
+                      : h(
+                          'div',
+                          { className: 'dsm-manageList' },
+                          filtered.map((item) =>
+                            h(
+                              'div',
+                              { className: 'dsm-manageRow', key: item.route },
+                              h(
+                                'div',
+                                { className: 'dsm-manageMain' },
+                                h('span', { className: 'dsm-manageName', title: item.displayName }, item.displayName),
+                                h('span', { className: 'dsm-manageSub', title: item.modelId }, item.modelId || item.baseURL),
+                              ),
+                              h(
+                                'div',
+                                { className: 'dsm-manageActions' },
+                                h(
+                                  DsmButton,
+                                  { size: 'sm', variant: 'ghost', onClick: () => store.set({ editTarget: item }) },
+                                  t('manage.edit'),
+                                ),
+                                h(
+                                  DsmButton,
+                                  { size: 'sm', variant: 'danger', onClick: () => store.set({ confirmTarget: item }) },
+                                  t('manage.delete'),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              h(
+                'div',
+                { className: 'dsm-footer' },
+                h(DsmButton, { variant: 'ghost', onClick: onClose }, t('manage.done')),
+              ),
+            ),
+          );
+        }
+
         /** 常驻 overlay 宿主：弹窗 + 状态条。 */
         function DialogHost() {
           const open = useStoreValue(store, (state) => state.open);
           const toast = useStoreValue(store, (state) => state.toast);
           const editTarget = useStoreValue(store, (state) => state.editTarget);
           const confirmTarget = useStoreValue(store, (state) => state.confirmTarget);
+          const manageOpen = useStoreValue(store, (state) => state.manageOpen);
           // 热更新会换掉插件实例：把上一次实例遗留在 body 里的 portal / 弹窗清掉，
           // 避免出现「旧下拉盖住新下拉」这种只在开发时可见的残影。
           useEffect(() => {
@@ -2877,7 +2892,12 @@ window.__ModuleLoader__.load({
                   target: editTarget,
                   onClose: () => store.set({ editTarget: null }),
                   onSaved: (model) => {
-                    store.set({ editTarget: null });
+                    store.set((state) => ({
+                      ...state,
+                      editTarget: null,
+                      manageOpen: true,
+                      manageVersion: state.manageVersion + 1,
+                    }));
                     bridge.refresh();
                     showToast(t('toast.updated', { model }));
                   },
@@ -2887,22 +2907,31 @@ window.__ModuleLoader__.load({
                     target: confirmTarget,
                     onClose: () => store.set({ confirmTarget: null }),
                     onDeleted: (target) => {
-                      store.set({ confirmTarget: null });
+                      store.set((state) => ({
+                        ...state,
+                        confirmTarget: null,
+                        manageOpen: true,
+                        manageVersion: state.manageVersion + 1,
+                      }));
                       bridge.refresh();
                       showToast(t('toast.deleted', { model: target.displayName }));
                     },
                   })
-                : h(AddModelDialog, {
-                    open,
-                    t,
-                    onClose: () => store.set({ open: false }),
-                    onSubmit: (draft) => {
-                      writeDraft(draft);
-                      store.set({ open: false });
-                      bridge.refresh();
-                      showToast(t('toast.added', { model: draft.modelName || draft.providerName }));
-                    },
-                  }),
+                : manageOpen
+                  ? h(ManageDialog, {
+                      onClose: () => store.set({ manageOpen: false }),
+                    })
+                  : h(AddModelDialog, {
+                      open,
+                      t,
+                      onClose: () => store.set({ open: false }),
+                      onSubmit: (draft) => {
+                        writeDraft(draft);
+                        store.set({ open: false });
+                        bridge.refresh();
+                        showToast(t('toast.added', { model: draft.modelName || draft.providerName }));
+                      },
+                    }),
             toast !== null
               ? h(DsmToast, {
                   key: toast.id,
