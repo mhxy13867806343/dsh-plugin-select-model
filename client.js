@@ -343,10 +343,15 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 写入本地草稿（布局阶段只做留存，不参与真实接入）。 */
+    /** 写入本地草稿（布局阶段只做留存，不参与真实接入）。**故意不落 API Key**。 */
     function writeDraft(draft) {
       try {
-        window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        const safe = {
+          providerId: draft.providerId,
+          baseUrl: draft.baseUrl,
+          modelName: draft.modelName,
+        };
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify(safe));
       } catch {
         /* 隐私模式 / 配额满：忽略 */
       }
@@ -370,6 +375,8 @@ window.__ModuleLoader__.load({
       let disposed = false;
       let scheduled = false;
       let observer = null;
+      /** 本实例的标记：清理时只删自己注入的节点，避免 HMR 重载时新旧实例互删。 */
+      const owner = Math.random().toString(36).slice(2, 10);
 
       /** 找到当前打开的模型根菜单（只认内置 zh/en 两个 aria-label）。 */
       const findModelRootMenu = () => {
@@ -419,6 +426,7 @@ window.__ModuleLoader__.load({
         row.removeAttribute('disabled');
         row.removeAttribute('aria-disabled');
         row.setAttribute(ROW_ATTR, '');
+        row.setAttribute('data-dsm-owner', owner);
         row.setAttribute('data-testid', 'select-model-add-row');
 
         const spans = Array.from(row.children).filter(
@@ -440,6 +448,7 @@ window.__ModuleLoader__.load({
 
         const divider = document.createElement('div');
         divider.setAttribute(DIVIDER_ATTR, '');
+        divider.setAttribute('data-dsm-owner', owner);
         divider.style.cssText =
           'flex:none;height:1px;margin:4px 8px;background:var(--dsw-alias-border-l1,rgba(127,127,127,.28))';
 
@@ -467,12 +476,16 @@ window.__ModuleLoader__.load({
       observer.observe(document.body, { childList: true, subtree: true });
       scan();
 
+      // 兜底轮询：菜单打开但某次 mutation 没赶上（或 HMR 重载换了实例）时自愈。
+      const interval = window.setInterval(scan, 1000);
+
       return () => {
         disposed = true;
+        window.clearInterval(interval);
         if (observer !== null) observer.disconnect();
         observer = null;
-        document.querySelectorAll(`[${ROW_ATTR}]`).forEach((node) => node.remove());
-        document.querySelectorAll(`[${DIVIDER_ATTR}]`).forEach((node) => node.remove());
+        document.querySelectorAll(`[${ROW_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
+        document.querySelectorAll(`[${DIVIDER_ATTR}][data-dsm-owner="${owner}"]`).forEach((node) => node.remove());
       };
     }
 
@@ -613,6 +626,16 @@ window.__ModuleLoader__.load({
         });
       };
 
+      /** Enter 提交（焦点在输入框时）；按钮自身的 Enter 走原生 click，避免重复提交。 */
+      const onDialogKeyDown = (event) => {
+        if (event.key !== 'Enter' || event.shiftKey) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('button') !== null) return;
+        if (!canAdd) return;
+        event.preventDefault();
+        submit();
+      };
+
       const body = h(
         'div',
         { className: 'dsm-body' },
@@ -745,6 +768,7 @@ window.__ModuleLoader__.load({
             'aria-label': t('dialog.title'),
             tabIndex: -1,
             'data-testid': 'select-model-dialog',
+            onKeyDown: onDialogKeyDown,
           },
           h(
             'div',
@@ -821,6 +845,13 @@ window.__ModuleLoader__.load({
           window.setTimeout(tick, stepMs);
         };
         tick();
+      });
+    }
+
+    /** 等待若干毫秒（等入场动画结束再量尺寸）。 */
+    function sleep(ms) {
+      return new Promise((resolve) => {
+        window.setTimeout(resolve, ms);
       });
     }
 
@@ -920,6 +951,7 @@ window.__ModuleLoader__.load({
           if (dialog === null) {
             return { ok: false, reason: 'dialog-not-opened', menuRows };
           }
+          await sleep(260); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
           const rect = dialog.getBoundingClientRect();
           const body = dialog.querySelector('.dsm-body');
           const hint = dialog.querySelector('.dsm-hint');
@@ -1017,6 +1049,7 @@ window.__ModuleLoader__.load({
           }
           report.steps.push('dialog opened');
           report.menuClosedAfterOpen = findMenu() === null;
+          await sleep(260); // 等 dsmPop 入场动画（scale .985）结束再量真实尺寸
           const dialogRect = dialog.getBoundingClientRect();
           const providers = Array.from(dialog.querySelectorAll('.dsm-provider'));
           const inputs = Array.from(dialog.querySelectorAll('input'));
