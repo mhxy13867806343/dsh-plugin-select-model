@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Model Menu · Add Model",
+    "description": "Adds an \"Add model\" entry to the bottom of the model menu so you can pick a third-party provider or paste an API key directly. This build is the UI layout only."
+  }
+}

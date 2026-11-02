@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="dsh-plugin-select-model">
+  <title>dsh-plugin-select-model</title>
+  <!-- 背景：深色圆角方块 -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1b2130"/>
+  <rect x="3" y="3" width="58" height="58" rx="13" stroke="#2c3648" stroke-width="2"/>
+  <!-- 芯片引脚 -->
+  <g stroke="#4d8dff" stroke-width="3" stroke-linecap="round">
+    <path d="M25 12v6"/>
+    <path d="M39 12v6"/>
+    <path d="M25 46v6"/>
+    <path d="M39 46v6"/>
+    <path d="M12 25h6"/>
+    <path d="M12 39h6"/>
+    <path d="M46 25h6"/>
+    <path d="M46 39h6"/>
+  </g>
+  <!-- 芯片本体 -->
+  <rect x="18" y="18" width="28" height="28" rx="7" fill="#232c40" stroke="#4d8dff" stroke-width="2.5"/>
+  <!-- 加号：新增模型 -->
+  <g stroke="#8ab8ff" stroke-width="3.5" stroke-linecap="round">
+    <path d="M32 25v14"/>
+    <path d="M25 32h14"/>
+  </g>
+</svg>

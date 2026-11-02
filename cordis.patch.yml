@@ -1,0 +1,9 @@
+# dsh-plugin-select-model —— bundle patch（安装时由 plugin_manager 读取）
+#
+# 只插一行 Host 插件。本插件是纯客户端 UI：真正的界面在 client.js 里，
+# Host 半边 index.js 只导出 apply() 空壳，存在的意义是让 bundle 有一条
+# 能被 Loader 装载的入口。
+
+- insert:
+    - id: select-model
+      name: 'dsh-plugin-select-model'
